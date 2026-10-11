@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/talyvor/track/internal/gatewayauth"
 	"github.com/talyvor/track/internal/lenscreds"
 	"github.com/talyvor/track/internal/lensintegration"
 	"github.com/talyvor/track/internal/model"
@@ -171,5 +172,25 @@ func TestTwoTenants_IsolatedEndToEnd_NoSharedKeyOnDataPath(t *testing.T) {
 		if a != "Bearer "+testMintKey {
 			t.Errorf("mint used %q, want the narrow mint credential", a)
 		}
+	}
+}
+
+// B17.213: a call made on a request the gateway attributed to a Lens workspace is billed there — the
+// bearer is minted for it — not to the Track workspace, which is Track's own id and no Lens workspace
+// (Lens answers 402 for that since its B17.132).
+func TestDataPath_BillsTheCallersLensWorkspace(t *testing.T) {
+	f := newAIFakeLens(t)
+	engine := New(lensintegration.New(f.server.URL, sharedAdminKey), nil, nil, testMintKey)
+	ctx := gatewayauth.WithIdentity(context.Background(), gatewayauth.Identity{Email: "a@x.com", LensWorkspace: "u-lens"})
+
+	if _, err := engine.TriageIssue(ctx, model.Issue{ID: "i-1", Identifier: "ENG-1", WorkspaceID: "ws-A", Title: "t", Description: "d"}); err != nil {
+		t.Fatalf("TriageIssue: %v", err)
+	}
+	_, _, _, calls := f.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 data-path call, got %d", len(calls))
+	}
+	if ws, _ := workspaceOf(calls[0].bearer); ws != "u-lens" {
+		t.Fatalf("bearer minted for %q, want the caller's Lens workspace u-lens", ws)
 	}
 }

@@ -167,3 +167,21 @@ func TestTransit_PEMPublicKey_GetsTheGatewaysKid(t *testing.T) {
 		t.Fatalf("PEM key parsed under kids %v, want the gateway's kid ePr3pXKmgtJDhC6W", keys)
 	}
 }
+
+// B17.213: the gateway names the caller's Lens workspace in X-Talyvor-Workspace (B17.218), and it is
+// read only once the proof holds — it decides whose money an AI call moves.
+func TestTransit_LiftsTheCallersLensWorkspaceBehindTheProof(t *testing.T) {
+	f := loadMinted(t)
+	var seen gatewayauth.Identity
+	h := gatewayauth.TransitMiddleware(verifierAt(t, f, time.Second), nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen, _ = gatewayauth.IdentityFrom(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := mintedRequest(f)
+	req.Header.Set(gatewayauth.HeaderWorkspace, "u-lens")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || seen.LensWorkspace != "u-lens" {
+		t.Fatalf("status %d, identity %+v — want 200 and LensWorkspace u-lens", rec.Code, seen)
+	}
+}

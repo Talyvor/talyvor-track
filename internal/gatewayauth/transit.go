@@ -327,7 +327,7 @@ func TransitMiddleware(v *TransitVerifier, exempt func(path string) bool) func(h
 				unauthorized(w)
 				return
 			}
-			id := Identity{LensWorkspace: r.Header.Get(HeaderLensWorkspace)}
+			id := Identity{LensWorkspace: lensWorkspaceOf(r.Header)}
 			if c.Amr == "jwt" {
 				id.Email = c.Email
 				id.UserID = c.Sub

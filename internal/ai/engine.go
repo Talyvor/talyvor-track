@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/talyvor/track/internal/gatewayauth"
 	"github.com/talyvor/track/internal/lenscreds"
 	"github.com/talyvor/track/internal/lensintegration"
 	"github.com/talyvor/track/internal/model"
@@ -192,6 +193,19 @@ func (e *Engine) UnavailableReason() string {
 	}
 }
 
+// billingWorkspace is the Lens workspace a call made for workspaceID is charged to: the caller's own
+// Lens workspace when the gateway named one on this request (gatewayauth.HeaderWorkspace), otherwise
+// workspaceID itself. A Track workspace id is Track's own and no Lens workspace: since Lens's B17.132
+// a call on its token is refused 402 "not enough credit" — the e2e run of 2026-10-11 saw every
+// summary, duplicate search and triage fail that way (B17.213). Background work carries no caller
+// and keeps the Track id.
+func billingWorkspace(ctx context.Context, workspaceID string) string {
+	if id, ok := gatewayauth.IdentityFrom(ctx); ok && id.LensWorkspace != "" {
+		return id.LensWorkspace
+	}
+	return workspaceID
+}
+
 // callAnthropicViaLens POSTs an Anthropic-shaped request to Lens's
 // proxy and returns the raw assistant content. featureID is the
 // issue identifier or other Track feature label — Lens uses it as
@@ -205,7 +219,7 @@ func (e *Engine) callAnthropicViaLens(ctx context.Context, workspaceID, featureI
 	// Fail closed: a mint failure errors the feature. We NEVER fall back
 	// to the shared key on a data path — that would re-collapse every
 	// tenant into Lens's empty-workspace bucket + "default" attribution.
-	token, err := e.creds.TokenFor(ctx, workspaceID)
+	token, err := e.creds.TokenFor(ctx, billingWorkspace(ctx, workspaceID))
 	if err != nil {
 		return "", fmt.Errorf("ai: mint workspace token: %w", err)
 	}
@@ -259,7 +273,7 @@ func (e *Engine) callEmbeddingsViaLens(ctx context.Context, workspaceID, feature
 		return nil, ErrAIUnavailable
 	}
 	// Fail closed on a mint failure — see callAnthropicViaLens.
-	token, err := e.creds.TokenFor(ctx, workspaceID)
+	token, err := e.creds.TokenFor(ctx, billingWorkspace(ctx, workspaceID))
 	if err != nil {
 		return nil, fmt.Errorf("ai: mint workspace token: %w", err)
 	}

@@ -30,7 +30,22 @@ const (
 	// HeaderLensWorkspace is the caller's Lens workspace — the one its plan is billed under (B32.73). The suite
 	// BFF sets it from the session; Track mints its own workspace ids, so they are never the Lens one.
 	HeaderLensWorkspace = "X-Lens-Workspace"
+	// HeaderWorkspace is the same thing under the name the suite BFF sets on EVERY forwarded request
+	// (B17.218): the caller's Lens workspace, which every Lens call made on the request is billed to
+	// (B17.213). A gateway SETS it from the session; one that passed a client's through would let a
+	// caller bill someone else's workspace.
+	HeaderWorkspace = "X-Talyvor-Workspace"
 )
+
+// lensWorkspaceOf is the caller's Lens workspace as the gateway named it: X-Talyvor-Workspace, else
+// the older X-Lens-Workspace the member add still sends. Read only after the proof holds — it decides
+// whose money an AI call moves.
+func lensWorkspaceOf(h http.Header) string {
+	if ws := h.Get(HeaderWorkspace); ws != "" {
+		return ws
+	}
+	return h.Get(HeaderLensWorkspace)
+}
 
 // MinSecretLen is the shortest shared secret this boundary will defend. It mirrors the
 // edge gateway's own GATEWAY_AUTH_SECRET minimum (edge-infra auth-service config.rs).
@@ -123,7 +138,7 @@ func Middleware(secret string, exempt func(path string) bool) func(http.Handler)
 				Teams:  r.Header.Get(HeaderUserTeams),
 				Issuer: r.Header.Get(HeaderAuthIss),
 
-				LensWorkspace: r.Header.Get(HeaderLensWorkspace),
+				LensWorkspace: lensWorkspaceOf(r.Header),
 			}
 			next.ServeHTTP(w, r.WithContext(WithIdentity(r.Context(), id)))
 		})
