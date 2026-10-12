@@ -2,8 +2,8 @@
 
 | Chart | Image | Port | Health |
 |---|---|---|---|
-| `deploy/helm/track` | `ghcr.io/gaboracnicolai/talyvor-track` | 3000 | `/healthz`, `/livez`, `/readyz` |
-| `deploy/helm/docs` | `ghcr.io/gaboracnicolai/talyvor-docs` | 4000 | `/healthz`, `/readyz` |
+| `deploy/helm/track` | `ghcr.io/talyvor/talyvor-track` | 3000 | `/healthz`, `/livez`, `/readyz` |
+| `deploy/helm/docs` | `ghcr.io/talyvor/talyvor-docs` | 4000 | `/healthz`, `/readyz` |
 
 Both expect an external Postgres with the `vector` extension available
 (`pgvector/pgvector:pg16` works) and read their secrets from a Secret you create.

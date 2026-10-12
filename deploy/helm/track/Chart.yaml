@@ -15,9 +15,9 @@ version: 0.1.0
 # to this field.
 appVersion: "0.1.0"
 
-home: https://github.com/gaboracnicolai/talyvor-track
+home: https://github.com/Talyvor/talyvor-track
 sources:
-  - https://github.com/gaboracnicolai/talyvor-track
+  - https://github.com/Talyvor/talyvor-track
 maintainers:
   - name: Talyvor Platform
 keywords:

@@ -7,7 +7,7 @@ replicaCount: 1
 
 image:
   # -- Published by talyvor-docs' CI on every push to its main.
-  repository: ghcr.io/gaboracnicolai/talyvor-docs
+  repository: ghcr.io/talyvor/talyvor-docs
   # -- `latest` or a 40-char commit sha. A production install should pin the sha.
   tag: latest
   pullPolicy: IfNotPresent

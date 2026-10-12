@@ -6,8 +6,8 @@
 # exit, pass or fail.
 #
 #   make helm-kind                                    # Track built from this checkout
-#   TRACK_IMAGE=ghcr.io/gaboracnicolai/talyvor-track:<sha> make helm-kind
-#   DOCS_IMAGE=ghcr.io/gaboracnicolai/talyvor-docs:<sha> make helm-kind
+#   TRACK_IMAGE=ghcr.io/talyvor/talyvor-track:<sha> make helm-kind
+#   DOCS_IMAGE=ghcr.io/talyvor/talyvor-docs:<sha> make helm-kind
 #   KEEP_CLUSTER=1 make helm-kind                     # leave the cluster up
 set -euo pipefail
 
@@ -15,7 +15,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 CLUSTER=${CLUSTER:-talyvor-charts}
 HOST_PORT=${HOST_PORT:-18080}
-DOCS_IMAGE=${DOCS_IMAGE:-ghcr.io/gaboracnicolai/talyvor-docs:latest}
+DOCS_IMAGE=${DOCS_IMAGE:-ghcr.io/talyvor/talyvor-docs:latest}
 NS=talyvor
 
 diagnose() {
