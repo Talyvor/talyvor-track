@@ -8,7 +8,7 @@ replicaCount: 1
 
 image:
   # -- Published by .github/workflows/ci.yaml (build-image) on every push to main.
-  repository: ghcr.io/gaboracnicolai/talyvor-track
+  repository: ghcr.io/talyvor/talyvor-track
   # -- `latest` or a 40-char commit sha. A production install should pin the sha.
   tag: latest
   pullPolicy: IfNotPresent

@@ -17,10 +17,10 @@ version: 0.1.0
 # defaults image.tag to `latest` rather than to this field.
 appVersion: "0.1.0"
 
-home: https://github.com/gaboracnicolai/talyvor-docs
+home: https://github.com/Talyvor/talyvor-docs
 sources:
-  - https://github.com/gaboracnicolai/talyvor-docs
-  - https://github.com/gaboracnicolai/talyvor-track
+  - https://github.com/Talyvor/talyvor-docs
+  - https://github.com/Talyvor/talyvor-track
 maintainers:
   - name: Talyvor Platform
 keywords:
