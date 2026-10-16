@@ -110,6 +110,19 @@
       "bodyNestedFields": []
     },
     {
+      "file": "src/api/webhooks.ts",
+      "line": 37,
+      "verb": "DELETE",
+      "path": "/v1/workspaces/{}/webhooks/{}",
+      "queryFields": [],
+      "queryUnbounded": false,
+      "hasBody": false,
+      "optionsSpread": false,
+      "bodyFields": [],
+      "bodyUnbounded": false,
+      "bodyNestedFields": []
+    },
+    {
       "file": "src/api/guests.ts",
       "line": 47,
       "verb": "GET",
@@ -640,6 +653,19 @@
       "bodyNestedFields": []
     },
     {
+      "file": "src/api/webhooks.ts",
+      "line": 22,
+      "verb": "GET",
+      "path": "/v1/workspaces/{}/webhooks",
+      "queryFields": [],
+      "queryUnbounded": false,
+      "hasBody": false,
+      "optionsSpread": false,
+      "bodyFields": [],
+      "bodyUnbounded": false,
+      "bodyNestedFields": []
+    },
+    {
       "file": "src/api/featureboard.ts",
       "line": 101,
       "verb": "PATCH",
@@ -1006,6 +1032,35 @@
       "hasBody": false,
       "optionsSpread": false,
       "bodyFields": [],
+      "bodyUnbounded": false,
+      "bodyNestedFields": []
+    },
+    {
+      "file": "src/api/webhooks.ts",
+      "line": 31,
+      "verb": "POST",
+      "path": "/v1/workspaces/{}/webhooks/{}/rotate",
+      "queryFields": [],
+      "queryUnbounded": false,
+      "hasBody": false,
+      "optionsSpread": false,
+      "bodyFields": [],
+      "bodyUnbounded": false,
+      "bodyNestedFields": []
+    },
+    {
+      "file": "src/api/webhooks.ts",
+      "line": 25,
+      "verb": "POST",
+      "path": "/v1/workspaces/{}/webhooks",
+      "queryFields": [],
+      "queryUnbounded": false,
+      "hasBody": true,
+      "optionsSpread": false,
+      "bodyFields": [
+        "events",
+        "url"
+      ],
       "bodyUnbounded": false,
       "bodyNestedFields": []
     },

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, X } from "lucide-react";
+import { Copy, RefreshCw, X } from "lucide-react";
 import { useWorkspaceStore } from "~/stores/workspace";
 import { teamsApi } from "~/api/teams";
 import { guestsApi } from "~/api/guests";
+import { WEBHOOK_EVENTS, webhooksApi, type Webhook } from "~/api/webhooks";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useUIStore } from "~/stores/ui";
@@ -72,6 +73,7 @@ export function SettingsPage() {
         />
       </section>
       <GuestsSection />
+      <WebhooksSection />
     </div>
   );
 }
@@ -208,6 +210,149 @@ function GuestsSection() {
           ))
         )}
       </div>
+    </section>
+  );
+}
+
+// WebhooksSection lets a workspace owner send issue and comment events to their own URL. Each
+// request is signed with the endpoint's secret, which is shown once, on create or rotate.
+function WebhooksSection() {
+  const { workspaceId } = useWorkspaceStore();
+  const qc = useQueryClient();
+  const toast = useUIStore((s) => s.toast);
+  const [url, setUrl] = useState("");
+  const [events, setEvents] = useState<string[]>([]);
+  const [shownSecret, setShownSecret] = useState<{ url: string; secret: string } | null>(null);
+
+  const hooks = useQuery({
+    queryKey: ["webhooks", workspaceId],
+    queryFn: () => webhooksApi.list(workspaceId),
+    enabled: !!workspaceId,
+    retry: false,
+  });
+  const done = () => qc.invalidateQueries({ queryKey: ["webhooks"] });
+  const onError = (err: Error) => toast(err.message, "error");
+  const create = useMutation({
+    mutationFn: () => webhooksApi.create(workspaceId, { url: url.trim(), events }),
+    onSuccess: (res) => {
+      setShownSecret({ url: res.url, secret: res.secret });
+      setUrl("");
+      setEvents([]);
+      void done();
+    },
+    onError,
+  });
+  const rotate = useMutation({
+    mutationFn: (h: Webhook) => webhooksApi.rotate(workspaceId, h.id),
+    onSuccess: (res, h) => setShownSecret({ url: h.url, secret: res.secret }),
+    onError,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => webhooksApi.remove(workspaceId, id),
+    onSuccess: done,
+    onError,
+  });
+
+  const toggle = (e: string) =>
+    setEvents((cur) => (cur.includes(e) ? cur.filter((x) => x !== e) : [...cur, e]));
+
+  return (
+    <section>
+      <h2 className="mb-2 text-sm font-semibold">Webhooks</h2>
+      <p className="mb-2 text-xs text-muted">
+        Send issue and comment events to your own HTTPS endpoint. Every request carries the
+        webhook-id, webhook-timestamp and webhook-signature headers; verify them with the
+        endpoint's secret. A failed delivery is retried six times over about 18 hours. Workspace owners only.
+      </p>
+
+      {hooks.isError ? (
+        <div className="text-xs text-muted">Only a workspace owner can manage webhooks.</div>
+      ) : (
+        <>
+          <div className="mb-3 space-y-2 rounded-md border border-border bg-bg/40 p-2">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="https://example.com/track-events"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                aria-label="Webhook URL"
+              />
+              <Button
+                size="sm"
+                onClick={() => (url.trim() ? create.mutate() : toast("URL required", "warn"))}
+                disabled={create.isPending}
+              >
+                {create.isPending ? "Adding…" : "Add"}
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              {WEBHOOK_EVENTS.map((e) => (
+                <label key={e} className="flex items-center gap-1 font-mono text-[10px]">
+                  <input type="checkbox" checked={events.includes(e)} onChange={() => toggle(e)} />
+                  {e}
+                </label>
+              ))}
+              <span className="text-[10px] text-muted">None ticked sends every event.</span>
+            </div>
+          </div>
+
+          {shownSecret ? (
+            <div className="mb-3 rounded-md border border-accent/40 bg-accent/5 p-3 text-xs">
+              <div className="mb-1 font-medium">Signing secret for {shownSecret.url}</div>
+              <div className="mb-2 text-muted">Copy it now — it is not shown again.</div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-bg px-2 py-1 font-mono text-[10px]">
+                  {shownSecret.secret}
+                </code>
+                <button
+                  onClick={() => {
+                    void navigator.clipboard.writeText(shownSecret.secret);
+                    toast("Copied to clipboard", "success");
+                  }}
+                  className="text-muted hover:text-text"
+                  title="Copy"
+                >
+                  <Copy size={12} />
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="space-y-1">
+            {hooks.isLoading ? (
+              <div className="text-xs text-muted">Loading…</div>
+            ) : (hooks.data ?? []).length === 0 ? (
+              <div className="text-xs text-muted">No webhooks yet.</div>
+            ) : (
+              (hooks.data ?? []).map((h) => (
+                <div
+                  key={h.id}
+                  className="flex items-center gap-2 rounded-md border border-border bg-bg px-2 py-1.5 text-xs"
+                >
+                  <div className="flex-1 truncate font-mono text-[10px]">{h.url}</div>
+                  <span className="text-[10px] text-muted">
+                    {h.events.length === 0 ? "all events" : h.events.join(", ")}
+                  </span>
+                  <button
+                    onClick={() => rotate.mutate(h)}
+                    className="text-muted hover:text-text"
+                    title="Rotate secret"
+                  >
+                    <RefreshCw size={12} />
+                  </button>
+                  <button
+                    onClick={() => remove.mutate(h.id)}
+                    className="text-muted hover:text-priority-urgent"
+                    title="Delete webhook"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 }
