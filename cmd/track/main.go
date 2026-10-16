@@ -62,6 +62,7 @@ import (
 	"github.com/talyvor/track/internal/template"
 	"github.com/talyvor/track/internal/timetracking"
 	"github.com/talyvor/track/internal/webhookdedup"
+	"github.com/talyvor/track/internal/webhooks"
 	"github.com/talyvor/track/internal/workflow"
 	"github.com/talyvor/track/internal/workspace"
 	"github.com/talyvor/track/migrations"
@@ -346,6 +347,7 @@ func main() {
 	// bytes at boot); absent ⇒ live API import is unavailable but Track runs normally.
 	var integrationHandler *integrations.Handler
 	var integrationStore *integrations.Store
+	var webhookHandler *webhooks.Handler
 	if len(cfg.IntegrationEncryptionKey) > 0 {
 		cipher, err := integrations.NewCipher(cfg.IntegrationEncryptionKey)
 		// ⚠ NOT UNREACHABLE, AND THIS COMMENT USED TO SAY IT WAS. It is reached whenever
@@ -364,6 +366,12 @@ func main() {
 		integrationHandler = integrations.NewHandler(integrationStore)
 		importJobHandler = importJobHandler.WithIntegrationChecker(integrationStore) // enable *_api enqueue
 		slog.Info("integrations: provider credential store enabled")
+		// B39.13: webhook secrets are sealed with the same cipher, so webhooks share this switch.
+		webhookStore := webhooks.NewStore(pool, cipher)
+		webhookHandler = webhooks.NewHandler(webhookStore)
+		webhookSink := webhooks.NewSink(webhookStore)
+		issueHandler.WithNotifier(teeNotifier{notifier, webhookSink})
+		go webhookSink.Start(ctx, 10*time.Second)
 	} else {
 		slog.Info("integrations: TRACK_INTEGRATION_ENCRYPTION_KEY unset — live API import disabled")
 	}
@@ -530,6 +538,9 @@ func main() {
 		if integrationHandler != nil {
 			integrationHandler.Mount(r) // T8 Build C.1: POST /integrations + GET /integrations/{provider}
 		}
+		if webhookHandler != nil {
+			webhookHandler.Mount(r) // B39.13: owner-only /v1/workspaces/{wsID}/webhooks
+		}
 		customFieldHandler.Mount(r)
 		dependencyHandler.Mount(r)
 		timeHandler.Mount(r)
@@ -620,4 +631,47 @@ type automationAdapter struct {
 
 func (a automationAdapter) Fire(ctx context.Context, trigger string, workspaceID string, issue model.Issue, changes map[string]any) error {
 	return a.engine.Fire(ctx, automation.RuleTrigger(trigger), workspaceID, issue, changes)
+}
+
+// issueNotifier is the issue handler's notifier seam (internal/issue/handler.go).
+type issueNotifier interface {
+	IssueCreated(ctx context.Context, wsID, teamID, actorID string, issue model.Issue)
+	IssueUpdated(ctx context.Context, wsID, teamID, issueID, actorID string, changes map[string]any)
+	IssueDeleted(ctx context.Context, wsID, teamID, issueID, actorID string)
+	CommentCreated(ctx context.Context, wsID, issueID, actorID string, comment model.Comment)
+	CommentUpdated(ctx context.Context, wsID, issueID, actorID string, comment model.Comment)
+	CommentDeleted(ctx context.Context, wsID, issueID, commentID, actorID string)
+}
+
+// teeNotifier sends each issue event to the live-update notifier and then to the webhook sink.
+type teeNotifier struct{ live, hooks issueNotifier }
+
+func (t teeNotifier) IssueCreated(ctx context.Context, wsID, teamID, actorID string, issue model.Issue) {
+	t.live.IssueCreated(ctx, wsID, teamID, actorID, issue)
+	t.hooks.IssueCreated(ctx, wsID, teamID, actorID, issue)
+}
+
+func (t teeNotifier) IssueUpdated(ctx context.Context, wsID, teamID, issueID, actorID string, changes map[string]any) {
+	t.live.IssueUpdated(ctx, wsID, teamID, issueID, actorID, changes)
+	t.hooks.IssueUpdated(ctx, wsID, teamID, issueID, actorID, changes)
+}
+
+func (t teeNotifier) IssueDeleted(ctx context.Context, wsID, teamID, issueID, actorID string) {
+	t.live.IssueDeleted(ctx, wsID, teamID, issueID, actorID)
+	t.hooks.IssueDeleted(ctx, wsID, teamID, issueID, actorID)
+}
+
+func (t teeNotifier) CommentCreated(ctx context.Context, wsID, issueID, actorID string, comment model.Comment) {
+	t.live.CommentCreated(ctx, wsID, issueID, actorID, comment)
+	t.hooks.CommentCreated(ctx, wsID, issueID, actorID, comment)
+}
+
+func (t teeNotifier) CommentUpdated(ctx context.Context, wsID, issueID, actorID string, comment model.Comment) {
+	t.live.CommentUpdated(ctx, wsID, issueID, actorID, comment)
+	t.hooks.CommentUpdated(ctx, wsID, issueID, actorID, comment)
+}
+
+func (t teeNotifier) CommentDeleted(ctx context.Context, wsID, issueID, commentID, actorID string) {
+	t.live.CommentDeleted(ctx, wsID, issueID, commentID, actorID)
+	t.hooks.CommentDeleted(ctx, wsID, issueID, commentID, actorID)
 }

@@ -28,6 +28,30 @@ func blocked(ip net.IP) bool {
 		ip.IsMulticast()
 }
 
+// resolve looks host up and refuses it when any address it resolves to is in a blocked range.
+func resolve(ctx context.Context, host string) ([]net.IP, error) {
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("safehttp: no addresses for %q", host)
+	}
+	for _, ip := range ips {
+		if blocked(ip) {
+			return nil, fmt.Errorf("%w: %s resolves to %s", ErrBlockedAddress, host, ip)
+		}
+	}
+	return ips, nil
+}
+
+// Check refuses a host the client would refuse to dial, so a URL can be rejected when it is
+// registered. The dial still re-checks: a name can resolve differently later.
+func Check(ctx context.Context, host string) error {
+	_, err := resolve(ctx, host)
+	return err
+}
+
 // safeDialContext resolves the host, rejects any resolved address in a blocked range, and dials the
 // resolved IP directly (so a DNS name can't rebind to an internal IP between the check and the connect).
 func safeDialContext(base *net.Dialer) func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -36,17 +60,9 @@ func safeDialContext(base *net.Dialer) func(ctx context.Context, network, addr s
 		if err != nil {
 			return nil, err
 		}
-		ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+		ips, err := resolve(ctx, host)
 		if err != nil {
 			return nil, err
-		}
-		if len(ips) == 0 {
-			return nil, fmt.Errorf("safehttp: no addresses for %q", host)
-		}
-		for _, ip := range ips {
-			if blocked(ip) {
-				return nil, fmt.Errorf("%w: %s resolves to %s", ErrBlockedAddress, host, ip)
-			}
 		}
 		// Dial the already-validated address, not the hostname (defeats DNS rebinding).
 		return base.DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
