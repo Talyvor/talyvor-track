@@ -125,7 +125,12 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	// caller_role lets Settings show owner-only sections (B39.31); the owner-gated writes still decide.
+	role, _ := authz.Role(r.Context())
+	writeJSON(w, http.StatusOK, struct {
+		*model.Workspace
+		CallerRole string `json:"caller_role"`
+	}{out, role})
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
