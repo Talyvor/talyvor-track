@@ -46,6 +46,9 @@ func (s SMTP) Send(ctx context.Context, to, subject, body string) error {
 		if err := c.StartTLS(&tls.Config{ServerName: s.Host}); err != nil {
 			return err
 		}
+	} else if s.Port != 465 && !isLoopback(s.Host) {
+		// A stripped STARTTLS offer must not turn into mail sent in the clear.
+		return fmt.Errorf("email: %s offers no STARTTLS", s.Host)
 	}
 	if s.User != "" {
 		if err := c.Auth(smtp.PlainAuth("", s.User, s.Password, s.Host)); err != nil {
@@ -89,4 +92,9 @@ func message(from, to, subject, body string) []byte {
 func mimeHeader(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	return mime.QEncoding.Encode("utf-8", s)
+}
+
+func isLoopback(host string) bool {
+	ip := net.ParseIP(host)
+	return host == "localhost" || (ip != nil && ip.IsLoopback())
 }
