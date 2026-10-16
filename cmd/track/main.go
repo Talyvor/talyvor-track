@@ -36,6 +36,7 @@ import (
 	"github.com/talyvor/track/internal/db"
 	"github.com/talyvor/track/internal/dbresil"
 	"github.com/talyvor/track/internal/dependency"
+	"github.com/talyvor/track/internal/email"
 	"github.com/talyvor/track/internal/featureboard"
 	"github.com/talyvor/track/internal/gatewayauth"
 	"github.com/talyvor/track/internal/guest"
@@ -348,6 +349,7 @@ func main() {
 	var integrationHandler *integrations.Handler
 	var integrationStore *integrations.Store
 	var webhookHandler *webhooks.Handler
+	issueNotifiers := teeNotifier{notifier}
 	if len(cfg.IntegrationEncryptionKey) > 0 {
 		cipher, err := integrations.NewCipher(cfg.IntegrationEncryptionKey)
 		// ⚠ NOT UNREACHABLE, AND THIS COMMENT USED TO SAY IT WAS. It is reached whenever
@@ -370,11 +372,20 @@ func main() {
 		webhookStore := webhooks.NewStore(pool, cipher)
 		webhookHandler = webhooks.NewHandler(webhookStore)
 		webhookSink := webhooks.NewSink(webhookStore)
-		issueHandler.WithNotifier(teeNotifier{notifier, webhookSink})
+		issueNotifiers = append(issueNotifiers, webhookSink)
 		go webhookSink.Start(ctx, 10*time.Second)
 	} else {
 		slog.Info("integrations: TRACK_INTEGRATION_ENCRYPTION_KEY unset — live API import disabled")
 	}
+	// B39.15: a member is emailed when an issue is assigned to them. Off unless TRACK_EMAIL_ENABLED.
+	if cfg.EmailEnabled {
+		mailSink := email.NewSink(pool, email.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, User: cfg.SMTPUser,
+			Password: cfg.SMTPPassword, From: cfg.EmailFrom}, os.Getenv("TRACK_INVITE_BASE_URL"))
+		issueNotifiers = append(issueNotifiers, mailSink)
+		go mailSink.Start(ctx, 30*time.Second)
+		slog.Info("email: assignment mail enabled", slog.String("smtp_host", cfg.SMTPHost))
+	}
+	issueHandler.WithNotifier(issueNotifiers)
 
 	// T8 Build B + C.3 — the async import-job runner. C.3 wires the credential store so linear_api/jira_api
 	// jobs load their token by the job's workspace_id (Build-B tenancy re-enforcement); absent ⇒ *_api jobs
@@ -541,6 +552,7 @@ func main() {
 		if webhookHandler != nil {
 			webhookHandler.Mount(r) // B39.13: owner-only /v1/workspaces/{wsID}/webhooks
 		}
+		email.NewHandler(pool).Mount(r) // B39.15: a member turns their own assignment mail on or off
 		customFieldHandler.Mount(r)
 		dependencyHandler.Mount(r)
 		timeHandler.Mount(r)
@@ -643,35 +655,41 @@ type issueNotifier interface {
 	CommentDeleted(ctx context.Context, wsID, issueID, commentID, actorID string)
 }
 
-// teeNotifier sends each issue event to the live-update notifier and then to the webhook sink.
-type teeNotifier struct{ live, hooks issueNotifier }
+// teeNotifier sends each issue event to the live-update notifier and then to each sink (webhooks, email).
+type teeNotifier []issueNotifier
 
 func (t teeNotifier) IssueCreated(ctx context.Context, wsID, teamID, actorID string, issue model.Issue) {
-	t.live.IssueCreated(ctx, wsID, teamID, actorID, issue)
-	t.hooks.IssueCreated(ctx, wsID, teamID, actorID, issue)
+	for _, n := range t {
+		n.IssueCreated(ctx, wsID, teamID, actorID, issue)
+	}
 }
 
 func (t teeNotifier) IssueUpdated(ctx context.Context, wsID, teamID, issueID, actorID string, changes map[string]any) {
-	t.live.IssueUpdated(ctx, wsID, teamID, issueID, actorID, changes)
-	t.hooks.IssueUpdated(ctx, wsID, teamID, issueID, actorID, changes)
+	for _, n := range t {
+		n.IssueUpdated(ctx, wsID, teamID, issueID, actorID, changes)
+	}
 }
 
 func (t teeNotifier) IssueDeleted(ctx context.Context, wsID, teamID, issueID, actorID string) {
-	t.live.IssueDeleted(ctx, wsID, teamID, issueID, actorID)
-	t.hooks.IssueDeleted(ctx, wsID, teamID, issueID, actorID)
+	for _, n := range t {
+		n.IssueDeleted(ctx, wsID, teamID, issueID, actorID)
+	}
 }
 
 func (t teeNotifier) CommentCreated(ctx context.Context, wsID, issueID, actorID string, comment model.Comment) {
-	t.live.CommentCreated(ctx, wsID, issueID, actorID, comment)
-	t.hooks.CommentCreated(ctx, wsID, issueID, actorID, comment)
+	for _, n := range t {
+		n.CommentCreated(ctx, wsID, issueID, actorID, comment)
+	}
 }
 
 func (t teeNotifier) CommentUpdated(ctx context.Context, wsID, issueID, actorID string, comment model.Comment) {
-	t.live.CommentUpdated(ctx, wsID, issueID, actorID, comment)
-	t.hooks.CommentUpdated(ctx, wsID, issueID, actorID, comment)
+	for _, n := range t {
+		n.CommentUpdated(ctx, wsID, issueID, actorID, comment)
+	}
 }
 
 func (t teeNotifier) CommentDeleted(ctx context.Context, wsID, issueID, commentID, actorID string) {
-	t.live.CommentDeleted(ctx, wsID, issueID, commentID, actorID)
-	t.hooks.CommentDeleted(ctx, wsID, issueID, commentID, actorID)
+	for _, n := range t {
+		n.CommentDeleted(ctx, wsID, issueID, commentID, actorID)
+	}
 }
