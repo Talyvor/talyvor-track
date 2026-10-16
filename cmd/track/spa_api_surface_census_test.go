@@ -364,7 +364,6 @@ var routesWithNoSPACaller = map[string]string{
 	"PATCH /v1/workspaces/{}/teams/{}":                         "path appears in track-nonsrc (PATH-level grep; the verb was NOT matched)",
 	"PATCH /v1/workspaces/{}/teams/{}/cycles/{}":               "NO CALLER ANYWHERE IN THE ESTATE",
 	"PATCH /v1/workspaces/{}/teams/{}/statuses/{}":             "NO CALLER ANYWHERE IN THE ESTATE",
-	"PUT /v1/workspaces/{}/notification-preferences/{}":        "NO CALLER ANYWHERE IN THE ESTATE (B39.15: API only; the Settings toggle is a follow-up)",
 	"POST /mcp":          "MCP transport — agents, not the SPA",
 	"POST /v1/bootstrap": "path appears in talyvor-suite,track-nonsrc (PATH-level grep; the verb was NOT matched)",
 	"POST /v1/guest/workspaces/{}/issues/{}/comments":          "NO CALLER ANYWHERE IN THE ESTATE",
