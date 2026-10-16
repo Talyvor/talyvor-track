@@ -176,6 +176,7 @@ func TestMeasured_TheWorkspaceChildTablesThatRefuseADelete(t *testing.T) {
 		"custom_fields", "feature_boards", "feature_posts", "guest_invites", "guests",
 		"issue_board_shares", "issue_scores", "issue_templates",
 		"notification_outbox", "notification_preferences", // B39.15: a workspace's mail and its members' choices go with it
+		"workspace_lens_billing",                             // B17.220: which Lens workspace a workspace is billed to goes with it
 		"workspace_webhook_deliveries", "workspace_webhooks", // B39.13: an endpoint and its attempts go with the workspace
 	}
 

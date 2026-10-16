@@ -361,6 +361,35 @@ func (s *Store) ListDeletedByIDs(ctx context.Context, ids []string) ([]model.Wor
 	return out, rows.Err()
 }
 
+// RecordLensBilling notes that a request on workspaceID was billed to lensWorkspaceID (B17.220).
+// Idempotent; the AI-cost syncer reads these pairs back with LensBilling.
+func (s *Store) RecordLensBilling(ctx context.Context, workspaceID, lensWorkspaceID string) error {
+	if _, err := s.pool.Exec(ctx, `INSERT INTO workspace_lens_billing (workspace_id, lens_workspace_id)
+		VALUES ($1, $2) ON CONFLICT DO NOTHING`, workspaceID, lensWorkspaceID); err != nil {
+		return fmt.Errorf("workspace: record lens billing: %w", err)
+	}
+	return nil
+}
+
+// LensBilling maps each Lens workspace to the Track workspaces billed to it, sorted by Track id.
+func (s *Store) LensBilling(ctx context.Context) (map[string][]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT lens_workspace_id, workspace_id FROM workspace_lens_billing
+		ORDER BY lens_workspace_id, workspace_id`)
+	if err != nil {
+		return nil, fmt.Errorf("workspace: lens billing: %w", err)
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var lens, ws string
+		if err := rows.Scan(&lens, &ws); err != nil {
+			return nil, err
+		}
+		out[lens] = append(out[lens], ws)
+	}
+	return out, rows.Err()
+}
+
 // ListIDs returns just the workspace IDs. Used by the Lens syncer to
 // iterate every workspace on its tick without paying for the full
 // row scan.

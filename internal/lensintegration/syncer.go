@@ -3,6 +3,7 @@ package lensintegration
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"time"
 )
 
@@ -20,12 +21,17 @@ type costUpdater interface {
 	// RecordRequestSpendAttributed is the same write with the issue the caller was working on
 	// preferred over the feature — see issue.Store for why the fallback is load-bearing.
 	RecordRequestSpendAttributed(ctx context.Context, requestID, feature, issueIdentifier string, costUSD float64, tokens int, workspaceID string) (resolved, landed bool, err error)
+	// WorkspaceOfIdentifier picks which of several Track workspaces billed to one Lens workspace holds the
+	// issue; "" for none or more than one.
+	WorkspaceOfIdentifier(ctx context.Context, identifier string, allowed []string) (string, error)
 }
 
 // workspaceLister returns the workspace IDs the syncer should poll on
 // every tick. Phase 4 wires this to workspace.Store.ListIDs.
 type workspaceLister interface {
 	ListIDs(ctx context.Context) ([]string, error)
+	// LensBilling maps each Lens workspace to the Track workspaces billed to it (B17.220).
+	LensBilling(ctx context.Context) (map[string][]string, error)
 }
 
 type Syncer struct {
@@ -60,13 +66,21 @@ func NewSyncer(client *Client, updater costUpdater, workspaces workspaceLister) 
 // is counted and logged SEPARATELY rather than folded into the unattributed total — a number that
 // cannot be deduplicated must not be added to one that can.
 func (s *Syncer) SyncFeatureSpend(ctx context.Context, workspaceID string) error {
+	return s.syncLensWorkspace(ctx, workspaceID, []string{workspaceID})
+}
+
+// syncLensWorkspace is SyncFeatureSpend for spend Lens holds under lensWorkspaceID, landed in the Track
+// workspace(s) billed to it (B17.220). With more than one, each row goes to the one workspace holding the
+// issue it names; none or several, and it lands unattributed under the first, never guessed onto an issue.
+func (s *Syncer) syncLensWorkspace(ctx context.Context, lensWorkspaceID string, trackWorkspaces []string) error {
 	if s.client == nil || !s.client.IsConfigured() {
 		return ErrNotConfigured
 	}
-	rows, err := s.client.GetSpendByRequest(ctx, workspaceID, 1)
+	workspaceID := trackWorkspaces[0]
+	rows, err := s.client.GetSpendByRequest(ctx, lensWorkspaceID, 1)
 	if err != nil {
 		slog.Warn("lensintegration: sync failed",
-			slog.String("workspace_id", workspaceID),
+			slog.String("lens_workspace_id", lensWorkspaceID),
 			slog.String("err", err.Error()),
 		)
 		return nil
@@ -88,10 +102,30 @@ func (s *Syncer) SyncFeatureSpend(ctx context.Context, workspaceID string) error
 		// feature as an IDE affordance ("code-chat"), so matching on it credited nothing for every
 		// request from the editor we ship. It also sends the issue, which Lens now returns. An
 		// empty issue resolves exactly as before, which is what keeps manual taggers working.
-		resolved, didLand, err := s.updater.RecordRequestSpendAttributed(ctx, rs.RequestID, rs.Feature, rs.IssueID, rs.CostUSD, rs.InputTokens+rs.OutputTokens, workspaceID)
+		target, feature, issueID := workspaceID, rs.Feature, rs.IssueID
+		if len(trackWorkspaces) > 1 {
+			ident := rs.IssueID
+			if ident == "" {
+				ident = rs.Feature
+			}
+			ws, err := s.updater.WorkspaceOfIdentifier(ctx, ident, trackWorkspaces)
+			if err != nil {
+				slog.Warn("lensintegration: cannot tell which workspace a request's issue is in — retried next sync",
+					slog.String("lens_workspace_id", lensWorkspaceID), slog.String("request_id", rs.RequestID), slog.String("err", err.Error()))
+				continue
+			}
+			if ws != "" {
+				target = ws
+			} else {
+				// shortcut: the unattributed row loses its lens_feature label, since the first workspace
+				// may hold the same identifier and must not be credited for it.
+				feature, issueID = "", ""
+			}
+		}
+		resolved, didLand, err := s.updater.RecordRequestSpendAttributed(ctx, rs.RequestID, feature, issueID, rs.CostUSD, rs.InputTokens+rs.OutputTokens, target)
 		if err != nil {
 			slog.Warn("lensintegration: RecordRequestSpend failed",
-				slog.String("workspace_id", workspaceID),
+				slog.String("workspace_id", target),
 				slog.String("feature", rs.Feature),
 				slog.String("issue", rs.IssueID),
 				slog.String("request_id", rs.RequestID),
@@ -110,7 +144,8 @@ func (s *Syncer) SyncFeatureSpend(ctx context.Context, workspaceID string) error
 		unattributedCost += rs.CostUSD
 	}
 	slog.Info("lensintegration: per-request spend sync complete",
-		slog.String("workspace_id", workspaceID),
+		slog.String("lens_workspace_id", lensWorkspaceID),
+		slog.Any("workspace_ids", trackWorkspaces),
 		slog.Int("attributed", attributed),
 		slog.Int("unattributed", unattributed),
 		slog.Float64("unattributed_cost_usd", unattributedCost),
@@ -156,6 +191,32 @@ func (s *Syncer) runOnce(ctx context.Context) {
 		)
 		return
 	}
+	// Lens workspace → the Track workspaces billed to it (B17.220): Track mints its own ids, so spend is
+	// asked for under the Lens workspace the gateway named. A workspace with none recorded is still asked
+	// for under its own id, as before.
+	billing, err := s.workspaces.LensBilling(ctx)
+	if err != nil {
+		slog.Warn("lensintegration: Lens billing listing failed — syncing by Track workspace id only",
+			slog.String("err", err.Error()))
+	}
+	targets := map[string][]string{}
+	billed := map[string]bool{}
+	for lens, tws := range billing {
+		targets[lens] = append(targets[lens], tws...)
+		for _, ws := range tws {
+			billed[ws] = true
+		}
+	}
+	for _, ws := range ids {
+		if !billed[ws] {
+			targets[ws] = append(targets[ws], ws)
+		}
+	}
+	ids = ids[:0:0]
+	for lens := range targets {
+		ids = append(ids, lens)
+	}
+	sort.Strings(ids)
 	// Sync only what the key can actually read (B18.33, W3.70): every workspace under an admin key,
 	// only the key's own workspace under a workspace key. Asking Lens for any other workspace returns
 	// the key's workspace's rows, which this loop used to record against the workspace it asked for.
@@ -187,6 +248,6 @@ func (s *Syncer) runOnce(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		_ = s.SyncFeatureSpend(ctx, ws)
+		_ = s.syncLensWorkspace(ctx, ws, targets[ws])
 	}
 }
