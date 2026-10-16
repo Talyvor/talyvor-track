@@ -29,8 +29,13 @@ func TestSyncer_CreditsSpendFromTheLensWorkspaceTheWorkspaceIsBilledTo(t *testin
 	// The owner's request is billed to Lens workspace lens-L; a member's, to another company's lens-X.
 	record := RecordBilledTo(wsStore)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	for _, c := range []struct{ role, lensWS string }{{authz.RoleOwner, "lens-L"}, {"member", "lens-X"}} {
+		var memberID string
+		if err := d.Pool.QueryRow(ctx, `INSERT INTO members (workspace_id, name, email, role) VALUES ($1, $2, $2, $2)
+			RETURNING id`, ws.ID, c.role).Scan(&memberID); err != nil {
+			t.Fatal(err)
+		}
 		req := httptest.NewRequest(http.MethodGet, "/v1/workspaces/"+ws.ID+"/issues", nil)
-		rctx := gatewayauth.WithIdentity(authz.WithAuthorizedRole(ctx, ws.ID, "m-"+c.role, c.role),
+		rctx := gatewayauth.WithIdentity(authz.WithAuthorizedRole(ctx, ws.ID, memberID, c.role),
 			gatewayauth.Identity{Email: c.role + "@x.test", LensWorkspace: c.lensWS})
 		record.ServeHTTP(httptest.NewRecorder(), req.WithContext(rctx))
 	}
@@ -60,5 +65,27 @@ func TestSyncer_CreditsSpendFromTheLensWorkspaceTheWorkspaceIsBilledTo(t *testin
 		if cost != 0.0392 || rows != 1 {
 			t.Fatalf("after pull %d: ENG-1 ai_cost_usd=%v with %d ledger rows, want 0.0392 from exactly one row", pull, cost, rows)
 		}
+	}
+}
+
+// A former owner's Lens workspace stops being synced for the workspace once they are no longer an owner.
+func TestLensBilling_DropsAPairWhoseMemberIsNoLongerOwner(t *testing.T) {
+	d := testutil.New(t)
+	ctx := context.Background()
+	ws := d.Workspace(t)
+	var owner string
+	if err := d.Pool.QueryRow(ctx, `INSERT INTO members (workspace_id, name, email, role) VALUES ($1, 'o', 'o@x.test', 'owner')
+		RETURNING id`, ws.ID).Scan(&owner); err != nil {
+		t.Fatal(err)
+	}
+	st := workspace.NewStore(d.Pool)
+	if err := st.RecordLensBilling(ctx, ws.ID, owner, "lens-L"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Pool.Exec(ctx, `UPDATE members SET role='member' WHERE id=$1`, owner); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := st.LensBilling(ctx); err != nil || len(got) != 0 {
+		t.Fatalf("LensBilling after demotion = %v, %v; want nothing", got, err)
 	}
 }

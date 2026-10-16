@@ -361,20 +361,23 @@ func (s *Store) ListDeletedByIDs(ctx context.Context, ids []string) ([]model.Wor
 	return out, rows.Err()
 }
 
-// RecordLensBilling notes that a request on workspaceID was billed to lensWorkspaceID (B17.220).
-// Idempotent; the AI-cost syncer reads these pairs back with LensBilling.
-func (s *Store) RecordLensBilling(ctx context.Context, workspaceID, lensWorkspaceID string) error {
-	if _, err := s.pool.Exec(ctx, `INSERT INTO workspace_lens_billing (workspace_id, lens_workspace_id)
-		VALUES ($1, $2) ON CONFLICT DO NOTHING`, workspaceID, lensWorkspaceID); err != nil {
+// RecordLensBilling notes that memberID's request on workspaceID was billed to lensWorkspaceID (B17.220).
+// Idempotent; the AI-cost syncer reads these back with LensBilling.
+func (s *Store) RecordLensBilling(ctx context.Context, workspaceID, memberID, lensWorkspaceID string) error {
+	if _, err := s.pool.Exec(ctx, `INSERT INTO workspace_lens_billing (workspace_id, member_id, lens_workspace_id)
+		VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, workspaceID, memberID, lensWorkspaceID); err != nil {
 		return fmt.Errorf("workspace: record lens billing: %w", err)
 	}
 	return nil
 }
 
-// LensBilling maps each Lens workspace to the Track workspaces billed to it, sorted by Track id.
+// LensBilling maps each Lens workspace to the Track workspaces billed to it, sorted by Track id. Only a
+// pair recorded by a member who is still an owner counts, so a former owner's Lens workspace stops.
 func (s *Store) LensBilling(ctx context.Context) (map[string][]string, error) {
-	rows, err := s.pool.Query(ctx, `SELECT lens_workspace_id, workspace_id FROM workspace_lens_billing
-		ORDER BY lens_workspace_id, workspace_id`)
+	rows, err := s.pool.Query(ctx, `SELECT DISTINCT b.lens_workspace_id, b.workspace_id
+		FROM workspace_lens_billing b
+		JOIN members m ON m.id = b.member_id AND m.workspace_id = b.workspace_id AND m.role = 'owner'
+		ORDER BY 1, 2`)
 	if err != nil {
 		return nil, fmt.Errorf("workspace: lens billing: %w", err)
 	}
