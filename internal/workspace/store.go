@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/talyvor/track/internal/model"
+	"github.com/talyvor/track/internal/tenancy"
 )
 
 type pgxDB interface {
@@ -364,6 +365,9 @@ func (s *Store) ListDeletedByIDs(ctx context.Context, ids []string) ([]model.Wor
 // RecordLensBilling notes that memberID's request on workspaceID was billed to lensWorkspaceID (B17.220).
 // Idempotent; the AI-cost syncer reads these back with LensBilling.
 func (s *Store) RecordLensBilling(ctx context.Context, workspaceID, memberID, lensWorkspaceID string) error {
+	if err := tenancy.AssertRefInWorkspace(ctx, s.pool, "members", memberID, workspaceID); err != nil {
+		return err
+	}
 	if _, err := s.pool.Exec(ctx, `INSERT INTO workspace_lens_billing (workspace_id, member_id, lens_workspace_id)
 		VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, workspaceID, memberID, lensWorkspaceID); err != nil {
 		return fmt.Errorf("workspace: record lens billing: %w", err)
