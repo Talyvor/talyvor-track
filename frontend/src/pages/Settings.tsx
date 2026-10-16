@@ -6,6 +6,7 @@ import { teamsApi } from "~/api/teams";
 import { guestsApi } from "~/api/guests";
 import { WEBHOOK_EVENTS, webhooksApi, type Webhook } from "~/api/webhooks";
 import { notificationsApi } from "~/api/notifications";
+import { workspacesApi } from "~/api/workspaces";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useUIStore } from "~/stores/ui";
@@ -74,6 +75,7 @@ export function SettingsPage() {
         />
       </section>
       <EmailSection />
+      <EmailBrandingSection />
       <GuestsSection />
       <WebhooksSection />
     </div>
@@ -135,6 +137,109 @@ function MailToggle({ kind, fallback, children }: { kind: string; fallback: bool
       {children}
     </label>
   );
+}
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const OBSIDIAN = "#060A12";
+
+// EmailBrandingSection lets a workspace owner set the colour and logo at the top of every Track mail; the
+// server refuses a value that is not #rrggbb or an https URL, and members never see the section.
+function EmailBrandingSection() {
+  const { workspaceId } = useWorkspaceStore();
+  const ws = useQuery({
+    queryKey: ["workspace", workspaceId],
+    queryFn: () => workspacesApi.get(workspaceId),
+    enabled: !!workspaceId,
+    retry: false,
+  });
+  if (ws.data?.caller_role !== "owner") return null;
+  return <EmailBrandingForm key={ws.data.id} initial={ws.data} />;
+}
+
+function EmailBrandingForm({ initial }: { initial: { name: string; email_header_color: string; logo_url: string } }) {
+  const { workspaceId } = useWorkspaceStore();
+  const qc = useQueryClient();
+  const toast = useUIStore((s) => s.toast);
+  const [color, setColor] = useState(initial.email_header_color);
+  const [logo, setLogo] = useState(initial.logo_url);
+  const save = useMutation({
+    mutationFn: () =>
+      workspacesApi.update(workspaceId, { email_header_color: color.trim(), logo_url: logo.trim() }),
+    onSuccess: (res) => {
+      qc.setQueryData(["workspace", workspaceId], res);
+      toast("Email branding saved", "success");
+    },
+  });
+  return (
+    <section>
+      <h2 className="mb-2 text-sm font-semibold">Email branding</h2>
+      <p className="mb-2 text-xs text-muted">
+        The colour and logo at the top of every email this workspace sends. Leave both empty for Talyvor's
+        default. Workspace owners only.
+      </p>
+      <div className="mb-3 space-y-2 rounded-md border border-border bg-bg/40 p-2">
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            aria-label="Pick header colour"
+            value={HEX_COLOR.test(color) ? color : OBSIDIAN}
+            onChange={(e) => setColor(e.target.value)}
+            className="h-9 w-9 shrink-0 cursor-pointer rounded border border-border bg-bg"
+          />
+          <Input
+            aria-label="Header colour"
+            placeholder={OBSIDIAN}
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="font-mono"
+          />
+        </div>
+        <Input
+          aria-label="Logo URL"
+          placeholder="https://example.com/logo.png"
+          value={logo}
+          onChange={(e) => setLogo(e.target.value)}
+        />
+        {/* The logo previews once saved: the server has checked it is https by then. */}
+        <MailHeaderPreview name={initial.name} color={color.trim()} logo={initial.logo_url} />
+        {save.isError ? (
+          <p role="alert" className="text-xs text-priority-urgent">
+            {save.error.message}
+          </p>
+        ) : null}
+        <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
+          {save.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+// MailHeaderPreview draws the header as internal/email/layout.go renders it: nothing set is Talyvor's
+// Obsidian and logo; a colour with no logo shows the workspace name in ink that reads on it.
+function MailHeaderPreview({ name, color, logo }: { name: string; color: string; logo: string }) {
+  const unbranded = !color && !logo;
+  const bg = HEX_COLOR.test(color) ? color : OBSIDIAN;
+  const src = unbranded ? "/email-logo.png" : logo.startsWith("https://") ? logo : "";
+  return (
+    <div aria-label="Email header preview" className="overflow-hidden rounded-md border border-border">
+      <div style={{ background: bg }} className="px-6 py-5">
+        {src ? (
+          <img src={src} alt={unbranded ? "Talyvor" : name} className="block h-8 max-w-full" />
+        ) : (
+          <span className="text-xl font-semibold" style={{ color: ink(bg) }}>
+            {name}
+          </span>
+        )}
+      </div>
+      <div className="bg-white px-6 py-3 text-xs text-[#060A12]">TRK-12 was assigned to you.</div>
+    </div>
+  );
+}
+
+function ink(bg: string) {
+  const v = parseInt(bg.slice(1), 16);
+  return 0.299 * ((v >> 16) & 0xff) + 0.587 * ((v >> 8) & 0xff) + 0.114 * (v & 0xff) > 150 ? OBSIDIAN : "#FFFFFF";
 }
 
 // GuestsSection embeds the guest-management surface in Settings. We

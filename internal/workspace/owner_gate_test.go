@@ -111,3 +111,19 @@ func TestWorkspace_Update_OwnerGated(t *testing.T) {
 		t.Fatalf("owner update = 200 but the stored name is %q, want %q", got, "Renamed")
 	}
 }
+
+// GET /v1/workspaces/{wsID} names the caller's own role, which Settings reads to show the owner-only email
+// branding section (B39.31).
+func TestWorkspace_Get_CallerRole(t *testing.T) {
+	d := testutil.New(t)
+	h := workspace.NewHandler(workspace.NewStore(d.Pool))
+	ws := d.Workspace(t)
+	for _, role := range []string{authz.RoleOwner, authz.RoleMember} {
+		rr := httptest.NewRecorder()
+		h.Get(rr, wsReq(http.MethodGet, ws.ID, role, ""))
+		if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"caller_role":"`+role+`"`) ||
+			!strings.Contains(rr.Body.String(), `"id":"`+ws.ID+`"`) {
+			t.Fatalf("%s get = %d %s, want 200 with id and caller_role %q", role, rr.Code, rr.Body.String(), role)
+		}
+	}
+}
