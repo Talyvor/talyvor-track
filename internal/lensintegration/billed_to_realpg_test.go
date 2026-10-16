@@ -26,12 +26,17 @@ func TestSyncer_CreditsSpendFromTheLensWorkspaceTheWorkspaceIsBilledTo(t *testin
 	}
 	wsStore := workspace.NewStore(d.Pool)
 
-	// A gateway request on the workspace, billed to Lens workspace lens-L.
-	req := httptest.NewRequest(http.MethodGet, "/v1/workspaces/"+ws.ID+"/issues", nil)
-	rctx := gatewayauth.WithIdentity(authz.WithAuthorized(ctx, ws.ID, "m-1"),
-		gatewayauth.Identity{Email: "a@x.test", LensWorkspace: "lens-L"})
-	RecordBilledTo(wsStore)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).
-		ServeHTTP(httptest.NewRecorder(), req.WithContext(rctx))
+	// The owner's request is billed to Lens workspace lens-L; a member's, to another company's lens-X.
+	record := RecordBilledTo(wsStore)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	for _, c := range []struct{ role, lensWS string }{{authz.RoleOwner, "lens-L"}, {"member", "lens-X"}} {
+		req := httptest.NewRequest(http.MethodGet, "/v1/workspaces/"+ws.ID+"/issues", nil)
+		rctx := gatewayauth.WithIdentity(authz.WithAuthorizedRole(ctx, ws.ID, "m-"+c.role, c.role),
+			gatewayauth.Identity{Email: c.role + "@x.test", LensWorkspace: c.lensWS})
+		record.ServeHTTP(httptest.NewRecorder(), req.WithContext(rctx))
+	}
+	if got, err := wsStore.LensBilling(ctx); err != nil || len(got) != 1 || len(got["lens-L"]) != 1 {
+		t.Fatalf("recorded billing = %v, %v; want only the owner's lens-L", got, err)
+	}
 
 	lens := httptest.NewServer(asAdminLens(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
