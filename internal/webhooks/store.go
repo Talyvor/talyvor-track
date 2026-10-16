@@ -131,10 +131,11 @@ func (s *Store) Delete(ctx context.Context, workspaceID, id string) error {
 }
 
 // secretFor reads and unseals a webhook's current secret.
-func (s *Store) secretFor(ctx context.Context, webhookID string) (string, error) {
+func (s *Store) secretFor(ctx context.Context, workspaceID, webhookID string) (string, error) {
 	var ct, nonce []byte
 	err := s.pool.QueryRow(ctx,
-		`SELECT secret_ciphertext, secret_nonce FROM workspace_webhooks WHERE id = $1`, webhookID).Scan(&ct, &nonce)
+		`SELECT secret_ciphertext, secret_nonce FROM workspace_webhooks WHERE workspace_id = $1 AND id = $2`,
+		workspaceID, webhookID).Scan(&ct, &nonce)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
 	}

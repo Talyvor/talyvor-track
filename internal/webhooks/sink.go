@@ -131,8 +131,8 @@ func (s *Sink) Start(ctx context.Context, interval time.Duration) {
 }
 
 type attempt struct {
-	id, webhookID, msgID, url, payload string
-	n                                  int
+	id, workspaceID, webhookID, msgID, url, payload string
+	n                                               int
 }
 
 // DeliverDue sends every attempt that is due and returns how many it sent. Claiming a row stamps attempted_at,
@@ -148,8 +148,8 @@ func (s *Sink) DeliverDue(ctx context.Context) (int, error) {
 		claimed AS (
 		    UPDATE workspace_webhook_deliveries SET attempted_at = NOW()
 		    WHERE id IN (SELECT id FROM due)
-		    RETURNING id, webhook_id, message_id, payload, attempt)
-		SELECT c.id, c.webhook_id, c.message_id, w.url, c.payload, c.attempt
+		    RETURNING id, workspace_id, webhook_id, message_id, payload, attempt)
+		SELECT c.id, c.workspace_id, c.webhook_id, c.message_id, w.url, c.payload, c.attempt
 		FROM claimed c JOIN workspace_webhooks w ON w.id = c.webhook_id`)
 	if err != nil {
 		return 0, err
@@ -157,7 +157,7 @@ func (s *Sink) DeliverDue(ctx context.Context) (int, error) {
 	var due []attempt
 	for rows.Next() {
 		var a attempt
-		if err := rows.Scan(&a.id, &a.webhookID, &a.msgID, &a.url, &a.payload, &a.n); err != nil {
+		if err := rows.Scan(&a.id, &a.workspaceID, &a.webhookID, &a.msgID, &a.url, &a.payload, &a.n); err != nil {
 			rows.Close()
 			return 0, err
 		}
@@ -191,8 +191,8 @@ func (s *Sink) send(ctx context.Context, a attempt) {
 		code = &status
 	}
 	if _, err := s.store.pool.Exec(ctx,
-		`UPDATE workspace_webhook_deliveries SET status_code = $2, error = $3 WHERE id = $1`,
-		a.id, code, errText); err != nil {
+		`UPDATE workspace_webhook_deliveries SET status_code = $3, error = $4 WHERE workspace_id = $1 AND id = $2`,
+		a.workspaceID, a.id, code, errText); err != nil {
 		slog.Error("webhooks: record attempt", "id", a.id, "err", err)
 	}
 	// A refused address will be refused again; retrying it only hammers the guard.
@@ -202,16 +202,16 @@ func (s *Sink) send(ctx context.Context, a attempt) {
 	if _, err := s.store.pool.Exec(ctx, `
 		INSERT INTO workspace_webhook_deliveries
 		    (workspace_id, webhook_id, message_id, event_type, payload, attempt, due_at)
-		SELECT workspace_id, webhook_id, message_id, event_type, payload, attempt + 1, NOW() + $2 * INTERVAL '1 second'
-		FROM workspace_webhook_deliveries WHERE id = $1
+		SELECT workspace_id, webhook_id, message_id, event_type, payload, attempt + 1, NOW() + $3 * INTERVAL '1 second'
+		FROM workspace_webhook_deliveries WHERE workspace_id = $1 AND id = $2
 		ON CONFLICT (webhook_id, message_id, attempt) DO NOTHING`,
-		a.id, int64(Backoff[a.n-1]/time.Second)); err != nil {
+		a.workspaceID, a.id, int64(Backoff[a.n-1]/time.Second)); err != nil {
 		slog.Error("webhooks: schedule retry", "id", a.id, "err", err)
 	}
 }
 
 func (s *Sink) post(ctx context.Context, a attempt) (int, error) {
-	secret, err := s.store.secretFor(ctx, a.webhookID)
+	secret, err := s.store.secretFor(ctx, a.workspaceID, a.webhookID)
 	if err != nil {
 		return 0, err
 	}
