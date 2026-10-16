@@ -5,6 +5,7 @@ import { useWorkspaceStore } from "~/stores/workspace";
 import { teamsApi } from "~/api/teams";
 import { guestsApi } from "~/api/guests";
 import { WEBHOOK_EVENTS, webhooksApi, type Webhook } from "~/api/webhooks";
+import { notificationsApi } from "~/api/notifications";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useUIStore } from "~/stores/ui";
@@ -72,9 +73,49 @@ export function SettingsPage() {
           onBlur={(e) => localStorage.setItem("track_api_key", e.target.value)}
         />
       </section>
+      <EmailSection />
       <GuestsSection />
       <WebhooksSection />
     </div>
+  );
+}
+
+// EmailSection is the caller's own mail choice; assignment mail is on until they turn it off.
+function EmailSection() {
+  const { workspaceId } = useWorkspaceStore();
+  const qc = useQueryClient();
+  const toast = useUIStore((s) => s.toast);
+  const key = ["notification-preferences", workspaceId, "issue.assigned"];
+  const pref = useQuery({
+    queryKey: key,
+    queryFn: () => notificationsApi.get(workspaceId, "issue.assigned"),
+    enabled: !!workspaceId,
+    retry: false,
+  });
+  const save = useMutation({
+    mutationFn: (email: boolean) => notificationsApi.set(workspaceId, "issue.assigned", email),
+    onSuccess: (res) => qc.setQueryData(key, res),
+    onError: (err: Error) => toast(err.message, "error"),
+  });
+
+  return (
+    <section>
+      <h2 className="mb-2 text-sm font-semibold">Email</h2>
+      {pref.isError ? (
+        <p className="text-xs text-muted">Join this workspace as a member to choose your email.</p>
+      ) : (
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            className="accent-accent"
+            checked={pref.data?.email ?? true}
+            disabled={pref.isLoading || save.isPending}
+            onChange={(e) => save.mutate(e.target.checked)}
+          />
+          Email me when an issue is assigned to me
+        </label>
+      )}
+    </section>
   );
 }
 

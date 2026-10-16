@@ -2,23 +2,54 @@ package email
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/talyvor/track/internal/authz"
 	"github.com/talyvor/track/internal/httpx"
 )
 
-// Handler is PUT /v1/workspaces/{wsID}/notification-preferences/{kind}: the caller turns one kind of email on
-// or off for themselves.
+// Handler is GET and PUT /v1/workspaces/{wsID}/notification-preferences/{kind}: the caller reads, or turns on
+// or off, one kind of email for themselves.
 type Handler struct{ pool *pgxpool.Pool }
 
 func NewHandler(pool *pgxpool.Pool) *Handler { return &Handler{pool: pool} }
 
 func (h *Handler) Mount(r chi.Router) {
+	r.Get("/workspaces/{wsID}/notification-preferences/{kind}", h.get)
 	r.Put("/workspaces/{wsID}/notification-preferences/{kind}", h.put)
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	wsID, ok := authz.WorkspaceID(r.Context())
+	memberID, ok2 := authz.MemberID(r.Context())
+	if !ok || !ok2 {
+		writeErr(w, http.StatusForbidden, "FORBIDDEN", "workspace not authorized")
+		return
+	}
+	kind := chi.URLParam(r, "kind")
+	if kind != KindAssigned {
+		writeErr(w, http.StatusNotFound, "UNKNOWN_KIND", "unknown notification kind")
+		return
+	}
+	// No row means on, as the sink reads it.
+	var on bool
+	err := h.pool.QueryRow(r.Context(), `
+		SELECT coalesce((SELECT p.email FROM notification_preferences p WHERE p.member_id = m.id AND p.kind = $3), true)
+		FROM members m WHERE m.workspace_id = $1 AND m.id = $2`, wsID, memberID, kind).Scan(&on)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeErr(w, http.StatusForbidden, "FORBIDDEN", "workspace not authorized")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "READ_FAILED", "could not read the preference")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"kind": kind, "email": on})
 }
 
 func (h *Handler) put(w http.ResponseWriter, r *http.Request) {

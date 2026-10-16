@@ -474,6 +474,19 @@
       "bodyNestedFields": []
     },
     {
+      "file": "src/api/notifications.ts",
+      "line": 11,
+      "verb": "GET",
+      "path": "/v1/workspaces/{}/notification-preferences/{}",
+      "queryFields": [],
+      "queryUnbounded": false,
+      "hasBody": false,
+      "optionsSpread": false,
+      "bodyFields": [],
+      "bodyUnbounded": false,
+      "bodyNestedFields": []
+    },
+    {
       "file": "src/api/projects.ts",
       "line": 9,
       "verb": "GET",
@@ -1099,6 +1112,21 @@
         "ice",
         "rice"
       ]
+    },
+    {
+      "file": "src/api/notifications.ts",
+      "line": 16,
+      "verb": "PUT",
+      "path": "/v1/workspaces/{}/notification-preferences/{}",
+      "queryFields": [],
+      "queryUnbounded": false,
+      "hasBody": true,
+      "optionsSpread": false,
+      "bodyFields": [
+        "email"
+      ],
+      "bodyUnbounded": false,
+      "bodyNestedFields": []
     }
   ]
 }

@@ -138,9 +138,19 @@ func TestAssignmentSendsOneMailAndACommentSendsNone(t *testing.T) {
 		}
 	}
 
-	// Once Bob turns assignment mail off, reassigning him sends nothing more.
-	if rr := call(r, "PUT", "/v1/workspaces/"+ws.ID+"/notification-preferences/issue.assigned", "bob@corp.com", `{"email":false}`); rr.Code != http.StatusOK {
+	// Once Bob turns assignment mail off in Settings, reassigning him sends nothing more.
+	pref := "/v1/workspaces/" + ws.ID + "/notification-preferences/issue.assigned"
+	if rr := call(r, "GET", pref, "bob@corp.com", ""); rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"email":true`) {
+		t.Fatalf("GET preference before = %d %s, want on by default", rr.Code, rr.Body.String())
+	}
+	if rr := call(r, "PUT", pref, "bob@corp.com", `{"email":false}`); rr.Code != http.StatusOK {
 		t.Fatalf("PUT preference = %d %s", rr.Code, rr.Body.String())
+	}
+	if rr := call(r, "GET", pref, "bob@corp.com", ""); rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"email":false`) {
+		t.Fatalf("GET preference after = %d %s, want off", rr.Code, rr.Body.String())
+	}
+	if rr := call(r, "GET", pref, "dana@corp.com", ""); !strings.Contains(rr.Body.String(), `"email":true`) {
+		t.Fatalf("Dana's preference = %d %s, want her own (on), not Bob's", rr.Code, rr.Body.String())
 	}
 	if rr := call(r, "PATCH", base, "dana@corp.com", `{"assignee_id":"`+bobID+`"}`); rr.Code != http.StatusOK {
 		t.Fatalf("PATCH assignee again = %d %s", rr.Code, rr.Body.String())
