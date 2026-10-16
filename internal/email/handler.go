@@ -43,11 +43,18 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "EMAIL_REQUIRED", "email (true or false) is required")
 		return
 	}
-	if _, err := h.pool.Exec(r.Context(), `
-		INSERT INTO notification_preferences (workspace_id, member_id, kind, email) VALUES ($1, $2, $3, $4)
+	// The member row is read inside the workspace, so the preference can only belong to a member of it.
+	tag, err := h.pool.Exec(r.Context(), `
+		INSERT INTO notification_preferences (workspace_id, member_id, kind, email)
+		SELECT workspace_id, id, $3, $4 FROM members WHERE workspace_id = $1 AND id = $2
 		ON CONFLICT (member_id, kind) DO UPDATE SET email = EXCLUDED.email, updated_at = NOW()`,
-		wsID, memberID, kind, *in.Email); err != nil {
+		wsID, memberID, kind, *in.Email)
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "SAVE_FAILED", "could not save the preference")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		writeErr(w, http.StatusForbidden, "FORBIDDEN", "workspace not authorized")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"kind": kind, "email": *in.Email})
