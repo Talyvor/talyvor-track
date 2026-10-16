@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, RefreshCw, X } from "lucide-react";
 import { useWorkspaceStore } from "~/stores/workspace";
@@ -80,42 +80,60 @@ export function SettingsPage() {
   );
 }
 
-// EmailSection is the caller's own mail choice; assignment mail is on until they turn it off.
+// EmailSection is the caller's own mail choice; assignment mail is on, and the daily digest off, until they
+// choose otherwise.
 function EmailSection() {
   const { workspaceId } = useWorkspaceStore();
-  const qc = useQueryClient();
-  const toast = useUIStore((s) => s.toast);
-  const key = ["notification-preferences", workspaceId, "issue.assigned"];
-  const pref = useQuery({
-    queryKey: key,
-    queryFn: () => notificationsApi.get(workspaceId, "issue.assigned"),
-    enabled: !!workspaceId,
-    retry: false,
-  });
-  const save = useMutation({
-    mutationFn: (email: boolean) => notificationsApi.set(workspaceId, "issue.assigned", email),
-    onSuccess: (res) => qc.setQueryData(key, res),
-    onError: (err: Error) => toast(err.message, "error"),
-  });
-
+  const pref = useMailPreference(workspaceId, "issue.assigned");
   return (
     <section>
       <h2 className="mb-2 text-sm font-semibold">Email</h2>
       {pref.isError ? (
         <p className="text-xs text-muted">Join this workspace as a member to choose your email.</p>
       ) : (
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            className="accent-accent"
-            checked={pref.data?.email ?? true}
-            disabled={pref.isLoading || save.isPending}
-            onChange={(e) => save.mutate(e.target.checked)}
-          />
-          Email me when an issue is assigned to me
-        </label>
+        <div className="space-y-2">
+          <MailToggle kind="issue.assigned" fallback>
+            Email me when an issue is assigned to me
+          </MailToggle>
+          <MailToggle kind="digest" fallback={false}>
+            Send me one daily digest at 09:00 UTC instead of a mail per event
+          </MailToggle>
+        </div>
       )}
     </section>
+  );
+}
+
+function useMailPreference(workspaceId: string, kind: string) {
+  return useQuery({
+    queryKey: ["notification-preferences", workspaceId, kind],
+    queryFn: () => notificationsApi.get(workspaceId, kind),
+    enabled: !!workspaceId,
+    retry: false,
+  });
+}
+
+function MailToggle({ kind, fallback, children }: { kind: string; fallback: boolean; children: ReactNode }) {
+  const { workspaceId } = useWorkspaceStore();
+  const qc = useQueryClient();
+  const toast = useUIStore((s) => s.toast);
+  const pref = useMailPreference(workspaceId, kind);
+  const save = useMutation({
+    mutationFn: (email: boolean) => notificationsApi.set(workspaceId, kind, email),
+    onSuccess: (res) => qc.setQueryData(["notification-preferences", workspaceId, kind], res),
+    onError: (err: Error) => toast(err.message, "error"),
+  });
+  return (
+    <label className="flex items-center gap-2 text-xs">
+      <input
+        type="checkbox"
+        className="accent-accent"
+        checked={pref.data?.email ?? fallback}
+        disabled={pref.isLoading || save.isPending}
+        onChange={(e) => save.mutate(e.target.checked)}
+      />
+      {children}
+    </label>
   );
 }
 

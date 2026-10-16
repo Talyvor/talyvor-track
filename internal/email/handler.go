@@ -14,8 +14,11 @@ import (
 )
 
 // Handler is GET and PUT /v1/workspaces/{wsID}/notification-preferences/{kind}: the caller reads, or turns on
-// or off, one kind of email for themselves.
+// or off, one kind of email for themselves, or (kind digest) one daily digest instead of a mail per event.
 type Handler struct{ pool *pgxpool.Pool }
+
+// kindDefault is each kind's value when the member never chose, as the sink reads it.
+var kindDefault = map[string]bool{KindAssigned: true, KindDigest: false}
 
 func NewHandler(pool *pgxpool.Pool) *Handler { return &Handler{pool: pool} }
 
@@ -32,15 +35,15 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind := chi.URLParam(r, "kind")
-	if kind != KindAssigned {
+	def, known := kindDefault[kind]
+	if !known {
 		writeErr(w, http.StatusNotFound, "UNKNOWN_KIND", "unknown notification kind")
 		return
 	}
-	// No row means on, as the sink reads it.
 	var on bool
 	err := h.pool.QueryRow(r.Context(), `
-		SELECT coalesce((SELECT p.email FROM notification_preferences p WHERE p.member_id = m.id AND p.kind = $3), true)
-		FROM members m WHERE m.workspace_id = $1 AND m.id = $2`, wsID, memberID, kind).Scan(&on)
+		SELECT coalesce((SELECT p.email FROM notification_preferences p WHERE p.member_id = m.id AND p.kind = $3), $4)
+		FROM members m WHERE m.workspace_id = $1 AND m.id = $2`, wsID, memberID, kind, def).Scan(&on)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeErr(w, http.StatusForbidden, "FORBIDDEN", "workspace not authorized")
 		return
@@ -60,7 +63,7 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind := chi.URLParam(r, "kind")
-	if kind != KindAssigned {
+	if _, known := kindDefault[kind]; !known {
 		writeErr(w, http.StatusNotFound, "UNKNOWN_KIND", "unknown notification kind")
 		return
 	}

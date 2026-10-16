@@ -5,7 +5,7 @@ export interface NotificationPreference {
   email: boolean;
 }
 
-// The caller's own choice; a member who never chose gets assignment mail.
+// The caller's own choice per kind; a member who never chose gets assignment mail and no digest.
 export const notificationsApi = {
   get(wsID: string, kind: string) {
     return apiRequest<NotificationPreference>(
