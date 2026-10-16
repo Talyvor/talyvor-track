@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -118,6 +120,16 @@ type Config struct {
 	// page is never public. OPTIONAL: unset ⇒ /metrics 401s every request. If SET it must
 	// be >= gatewayauth.MinSecretLen, failing at boot rather than serving behind a guessable token.
 	MetricsToken string
+
+	// Notification email (B39.15). EmailEnabled (TRACK_EMAIL_ENABLED) is OFF by default; switched on, Track
+	// refuses to boot unless TRACK_SMTP_HOST, TRACK_SMTP_PORT and TRACK_EMAIL_FROM are set, and
+	// TRACK_SMTP_USER and TRACK_SMTP_PASSWORD come as a pair.
+	EmailEnabled bool
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	EmailFrom    string
 }
 
 // MinMemberSyncSecretLen mirrors GATEWAY_AUTH_SECRET's minimum — this token gates the
@@ -238,6 +250,32 @@ func (c *Config) loadOptional() (*Config, error) {
 	c.MetricsToken = os.Getenv("TRACK_METRICS_TOKEN")
 	if c.MetricsToken != "" && len(c.MetricsToken) < gatewayauth.MinSecretLen {
 		return nil, fmt.Errorf("%w: TRACK_METRICS_TOKEN, if set, must be >= %d chars (/metrics carries workspace ids)", ErrMissingEnv, gatewayauth.MinSecretLen)
+	}
+	return c.loadEmail()
+}
+
+func (c *Config) loadEmail() (*Config, error) {
+	c.EmailEnabled = parseBool(os.Getenv("TRACK_EMAIL_ENABLED"))
+	c.SMTPHost = os.Getenv("TRACK_SMTP_HOST")
+	c.SMTPUser = os.Getenv("TRACK_SMTP_USER")
+	c.SMTPPassword = os.Getenv("TRACK_SMTP_PASSWORD")
+	c.EmailFrom = os.Getenv("TRACK_EMAIL_FROM")
+	if !c.EmailEnabled {
+		return c, nil
+	}
+	port, err := strconv.Atoi(os.Getenv("TRACK_SMTP_PORT"))
+	if err != nil || port < 1 || port > 65535 {
+		return nil, fmt.Errorf("%w: TRACK_EMAIL_ENABLED is on, so TRACK_SMTP_PORT must be a port number", ErrMissingEnv)
+	}
+	c.SMTPPort = port
+	if c.SMTPHost == "" {
+		return nil, fmt.Errorf("%w: TRACK_EMAIL_ENABLED is on, so TRACK_SMTP_HOST must be set", ErrMissingEnv)
+	}
+	if _, err := mail.ParseAddress(c.EmailFrom); err != nil {
+		return nil, fmt.Errorf("%w: TRACK_EMAIL_ENABLED is on, so TRACK_EMAIL_FROM must be an email address", ErrMissingEnv)
+	}
+	if (c.SMTPUser == "") != (c.SMTPPassword == "") {
+		return nil, fmt.Errorf("%w: TRACK_SMTP_USER and TRACK_SMTP_PASSWORD must be set together", ErrMissingEnv)
 	}
 	return c, nil
 }

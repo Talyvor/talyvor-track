@@ -51,6 +51,14 @@ services:
       # Bearer token for GET /metrics (its counters carry workspace ids). Unset ⇒ /metrics 401s
       # every request. >= 16 chars when set, or Track refuses to boot.
       - TRACK_METRICS_TOKEN=${TRACK_METRICS_TOKEN:-}
+      # Assignment email (B39.15). Off unless TRACK_EMAIL_ENABLED; on without a host, port and
+      # From address, Track refuses to boot. See .env.example.
+      - TRACK_EMAIL_ENABLED=${TRACK_EMAIL_ENABLED:-false}
+      - TRACK_SMTP_HOST=${TRACK_SMTP_HOST:-}
+      - TRACK_SMTP_PORT=${TRACK_SMTP_PORT:-}
+      - TRACK_SMTP_USER=${TRACK_SMTP_USER:-}
+      - TRACK_SMTP_PASSWORD=${TRACK_SMTP_PASSWORD:-}
+      - TRACK_EMAIL_FROM=${TRACK_EMAIL_FROM:-}
       # Track's copy of the edge gateway transit-proof secret — the root of the entire
       # auth boundary: whoever knows it can present ANY identity to Track.
       #

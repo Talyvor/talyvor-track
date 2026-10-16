@@ -200,7 +200,8 @@ var exemptRoutes = map[string]string{
 // +1 B18.36: GET /v1/workspaces/{wsID}/teams/{teamID}/cycles/{id}/plan
 // +4 B27.30: the issue-board links (list, create, revoke) and GET /v1/public/issue-boards/{token}
 // +4 B39.13: the workspace webhooks (create, list, rotate, delete)
-const totalRoutes = 146
+// +1 B39.15: PUT /v1/workspaces/{wsID}/notification-preferences/{kind}
+const totalRoutes = 147
 
 func exemptSubset(t *testing.T) []string {
 	t.Helper()
