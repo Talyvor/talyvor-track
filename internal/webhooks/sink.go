@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/talyvor/track/internal/model"
@@ -48,7 +49,10 @@ type Sink struct {
 }
 
 func NewSink(store *Store) *Sink {
-	return &Sink{store: store, client: safehttp.Client(15 * time.Second), kick: make(chan struct{}, 1)}
+	c := safehttp.Client(10 * time.Second)
+	// A webhook answers where it was registered; a redirect is a failed attempt, not a new target.
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &Sink{store: store, client: c, kick: make(chan struct{}, 1)}
 }
 
 // WithClient replaces the SSRF-guarded client; tests use it to reach a local server.
@@ -66,12 +70,13 @@ func (s *Sink) IssueDeleted(ctx context.Context, wsID, teamID, issueID, actorID 
 	s.enqueue(ctx, wsID, "issue.deleted", map[string]any{"team_id": teamID, "issue_id": issueID, "actor_id": actorID})
 }
 
-func (s *Sink) CommentCreated(ctx context.Context, wsID, issueID, actorID string, c model.Comment) {
-	s.enqueue(ctx, wsID, "comment.created", map[string]any{"issue_id": issueID, "actor_id": actorID, "comment": c})
+// The comment events name the stored comment's issue, not the one in the request path.
+func (s *Sink) CommentCreated(ctx context.Context, wsID, _, actorID string, c model.Comment) {
+	s.enqueue(ctx, wsID, "comment.created", map[string]any{"issue_id": c.IssueID, "actor_id": actorID, "comment": c})
 }
 
-func (s *Sink) CommentUpdated(ctx context.Context, wsID, issueID, actorID string, c model.Comment) {
-	s.enqueue(ctx, wsID, "comment.updated", map[string]any{"issue_id": issueID, "actor_id": actorID, "comment": c})
+func (s *Sink) CommentUpdated(ctx context.Context, wsID, _, actorID string, c model.Comment) {
+	s.enqueue(ctx, wsID, "comment.updated", map[string]any{"issue_id": c.IssueID, "actor_id": actorID, "comment": c})
 }
 
 func (s *Sink) CommentDeleted(ctx context.Context, wsID, issueID, commentID, actorID string) {
@@ -162,9 +167,13 @@ func (s *Sink) DeliverDue(ctx context.Context) (int, error) {
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
+	// Concurrently, so one slow endpoint holds up no other workspace's events.
+	var wg sync.WaitGroup
 	for _, a := range due {
-		s.send(ctx, a)
+		wg.Add(1)
+		go func() { defer wg.Done(); s.send(ctx, a) }()
 	}
+	wg.Wait()
 	return len(due), nil
 }
 
