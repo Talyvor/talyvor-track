@@ -47,7 +47,8 @@ func (f *fakeUpdater) RecordRequestSpend(_ context.Context, requestID, feature s
 
 type fakeWorkspaces struct{ ids []string }
 
-func (f *fakeWorkspaces) ListIDs(context.Context) ([]string, error) { return f.ids, nil }
+func (f *fakeWorkspaces) ListIDs(context.Context) ([]string, error)                { return f.ids, nil }
+func (f *fakeWorkspaces) LensBilling(context.Context) (map[string][]string, error) { return nil, nil }
 
 // byRequestBody wraps rows in the {rows, next_cursor} envelope the by-request endpoint returns.
 func byRequestBody(rows string) string { return `{"rows":` + rows + `,"next_cursor":""}` }
@@ -176,4 +177,8 @@ func (f *fakeUpdater) RecordRequestSpendAttributed(ctx context.Context, requestI
 		key = issueIdentifier
 	}
 	return f.RecordRequestSpend(ctx, requestID, key, cost, tokens, ws)
+}
+
+func (f *fakeUpdater) WorkspaceOfIdentifier(context.Context, string, []string) (string, error) {
+	return "", nil
 }

@@ -512,6 +512,7 @@ func main() {
 		r.Use(dbresil.Guard(dbBreaker))
 		r.Use(gwAuth)
 		r.Use(wsAuthz)
+		r.Use(lensintegration.RecordBilledTo(workspaceStore)) // B17.220: whose Lens spend the AI-cost sync reads
 		wsHandler.Mount(r)
 		teamHandler.Mount(r)
 		projectHandler.Mount(r)

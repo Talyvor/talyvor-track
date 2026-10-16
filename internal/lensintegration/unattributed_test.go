@@ -278,3 +278,7 @@ func (f *ledgerUpdater) RecordRequestSpendAttributed(ctx context.Context, reques
 	}
 	return f.RecordRequestSpend(ctx, requestID, key, cost, tokens, ws)
 }
+
+func (f *ledgerUpdater) WorkspaceOfIdentifier(context.Context, string, []string) (string, error) {
+	return "", nil
+}
