@@ -13,13 +13,15 @@ import (
 // Workspace is the top-level tenant. Every team, project, issue,
 // member, and cycle belongs to exactly one workspace.
 type Workspace struct {
-	ID        string    `json:"id"         db:"id"`
-	Name      string    `json:"name"       db:"name"`
-	Slug      string    `json:"slug"       db:"slug"`
-	LogoURL   string    `json:"logo_url"   db:"logo_url"`
-	Plan      string    `json:"plan"       db:"plan"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	ID      string `json:"id"         db:"id"`
+	Name    string `json:"name"       db:"name"`
+	Slug    string `json:"slug"       db:"slug"`
+	LogoURL string `json:"logo_url"   db:"logo_url"`
+	Plan    string `json:"plan"       db:"plan"`
+	// EmailHeaderColor (#rrggbb) heads the workspace's emails; empty is Talyvor's default (B39.18).
+	EmailHeaderColor string    `json:"email_header_color" db:"email_header_color"`
+	CreatedAt        time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 	// DeletedAt and RestorableUntil are set only on a deleted workspace (the owner's list of
 	// deleted workspaces and the delete/restore responses); a live workspace omits both.
 	DeletedAt       *time.Time `json:"deleted_at,omitempty"       db:"deleted_at"`

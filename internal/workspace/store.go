@@ -86,11 +86,11 @@ func (s *Store) WithWorkflowSeeder(wf workflowSeeder) *Store {
 	return s
 }
 
-const workspaceColumns = `id, name, slug, logo_url, plan, created_at, updated_at`
+const workspaceColumns = `id, name, slug, logo_url, plan, email_header_color, created_at, updated_at`
 
 func scanWorkspace(s interface{ Scan(...any) error }) (*model.Workspace, error) {
 	var w model.Workspace
-	if err := s.Scan(&w.ID, &w.Name, &w.Slug, &w.LogoURL, &w.Plan, &w.CreatedAt, &w.UpdatedAt); err != nil {
+	if err := s.Scan(&w.ID, &w.Name, &w.Slug, &w.LogoURL, &w.Plan, &w.EmailHeaderColor, &w.CreatedAt, &w.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return &w, nil
@@ -250,7 +250,7 @@ func (s *Store) List(ctx context.Context) ([]model.Workspace, error) {
 }
 
 var workspaceUpdatable = map[string]struct{}{
-	"name": {}, "slug": {}, "logo_url": {}, "plan": {},
+	"name": {}, "slug": {}, "logo_url": {}, "plan": {}, "email_header_color": {},
 }
 
 func (s *Store) Update(ctx context.Context, id string, updates map[string]any) (*model.Workspace, error) {
@@ -305,7 +305,7 @@ const deletedColumns = workspaceColumns + `, deleted_at`
 
 func scanDeleted(s interface{ Scan(...any) error }) (*model.Workspace, error) {
 	var w model.Workspace
-	if err := s.Scan(&w.ID, &w.Name, &w.Slug, &w.LogoURL, &w.Plan, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt); err != nil {
+	if err := s.Scan(&w.ID, &w.Name, &w.Slug, &w.LogoURL, &w.Plan, &w.EmailHeaderColor, &w.CreatedAt, &w.UpdatedAt, &w.DeletedAt); err != nil {
 		return nil, err
 	}
 	if w.DeletedAt != nil {

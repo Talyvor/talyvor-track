@@ -74,6 +74,12 @@ var productionDirs = []string{"internal", "cmd"}
 // builder stops naming the column, the column becomes genuinely writerless and
 // this entry would otherwise go on quietly excusing it forever.
 var dynamicBuilders = map[string]dynamicBuilder{
+	"workspaces.email_header_color": {
+		file:   "internal/workspace/store.go",
+		anchor: `"name": {}, "slug": {}, "logo_url": {}, "plan": {}, "email_header_color": {},`,
+		why: "internal/workspace Store.Update builds `SET k = $n` for every key in " +
+			"workspaceUpdatable; an owner's PATCH /v1/workspaces/{wsID} sets it (B39.18).",
+	},
 	"milestones.completed_at": {
 		file:   "internal/milestone/store.go",
 		anchor: `"name": {}, "description": {}, "status": {}, "target_date": {}, "completed_at": {},`,
