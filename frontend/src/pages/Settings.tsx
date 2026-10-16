@@ -200,7 +200,8 @@ function EmailBrandingForm({ initial }: { initial: { name: string; email_header_
           value={logo}
           onChange={(e) => setLogo(e.target.value)}
         />
-        <MailHeaderPreview name={initial.name} color={color.trim()} logo={logo.trim()} />
+        {/* The logo previews once saved: the server has checked it is https by then. */}
+        <MailHeaderPreview name={initial.name} color={color.trim()} logo={initial.logo_url} />
         {save.isError ? (
           <p role="alert" className="text-xs text-priority-urgent">
             {save.error.message}

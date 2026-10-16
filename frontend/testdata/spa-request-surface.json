@@ -679,6 +679,19 @@
       "bodyNestedFields": []
     },
     {
+      "file": "src/api/workspaces.ts",
+      "line": 14,
+      "verb": "GET",
+      "path": "/v1/workspaces/{}",
+      "queryFields": [],
+      "queryUnbounded": false,
+      "hasBody": false,
+      "optionsSpread": false,
+      "bodyFields": [],
+      "bodyUnbounded": false,
+      "bodyNestedFields": []
+    },
+    {
       "file": "src/api/featureboard.ts",
       "line": 101,
       "verb": "PATCH",
@@ -766,6 +779,22 @@
         "title_format",
         "updated_at",
         "workspace_id"
+      ],
+      "bodyUnbounded": false,
+      "bodyNestedFields": []
+    },
+    {
+      "file": "src/api/workspaces.ts",
+      "line": 17,
+      "verb": "PATCH",
+      "path": "/v1/workspaces/{}",
+      "queryFields": [],
+      "queryUnbounded": false,
+      "hasBody": true,
+      "optionsSpread": false,
+      "bodyFields": [
+        "email_header_color",
+        "logo_url"
       ],
       "bodyUnbounded": false,
       "bodyNestedFields": []
