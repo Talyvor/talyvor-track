@@ -2,7 +2,10 @@ package email
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,6 +15,9 @@ import (
 
 // KindAssigned is the one email Track sends today; a member gets it unless they turned it off.
 const KindAssigned = "issue.assigned"
+
+// KindDigest on holds a member's mail for one daily digest instead of a mail per event; no row means off.
+const KindDigest = "digest"
 
 // MaxAttempts is how many times one message is tried before it is left with its last error.
 const MaxAttempts = 5
@@ -117,10 +123,12 @@ func (s *Sink) SendDue(ctx context.Context) (int, error) {
 		WITH due AS (
 		    SELECT id FROM notification_outbox
 		    WHERE sent_at IS NULL AND attempts < $1 AND due_at <= NOW()
+		      AND NOT EXISTS (SELECT 1 FROM notification_preferences p
+		                      WHERE p.member_id = notification_outbox.member_id AND p.kind = $3 AND p.email)
 		    ORDER BY due_at LIMIT 50 FOR UPDATE SKIP LOCKED)
 		UPDATE notification_outbox SET attempts = attempts + 1, due_at = NOW() + $2 * INTERVAL '1 second'
 		WHERE id IN (SELECT id FROM due)
-		RETURNING id, workspace_id, to_email, subject, body`, MaxAttempts, int64(lease/time.Second))
+		RETURNING id, workspace_id, to_email, subject, body`, MaxAttempts, int64(lease/time.Second), KindDigest)
 	if err != nil {
 		return 0, err
 	}
@@ -154,4 +162,112 @@ func (s *Sink) SendDue(ctx context.Context) (int, error) {
 		}
 	}
 	return len(due), nil
+}
+
+// StartDigest sends the daily digests at 09:00 UTC every day until ctx ends.
+func (s *Sink) StartDigest(ctx context.Context) {
+	for {
+		now := time.Now().UTC()
+		next := time.Date(now.Year(), now.Month(), now.Day(), 9, 0, 0, 0, time.UTC)
+		if !next.After(now) {
+			next = next.Add(24 * time.Hour)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(next.Sub(now)):
+		}
+		if _, err := s.SendDigests(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("email: digest", "err", err)
+		}
+	}
+}
+
+// SendDigests sends each digest member one mail listing the events held for them, and returns how many it sent.
+func (s *Sink) SendDigests(ctx context.Context) (int, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT o.workspace_id, o.member_id FROM notification_outbox o
+		JOIN notification_preferences p ON p.member_id = o.member_id AND p.kind = $1 AND p.email
+		WHERE o.sent_at IS NULL AND o.attempts < $2`, KindDigest, MaxAttempts)
+	if err != nil {
+		return 0, err
+	}
+	var members [][2]string
+	for rows.Next() {
+		var m [2]string
+		if err := rows.Scan(&m[0], &m[1]); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		members = append(members, m)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	sent := 0
+	for _, m := range members {
+		ok, err := s.digestOne(ctx, m[0], m[1])
+		if err != nil {
+			slog.Warn("email: digest failed", "workspace_id", m[0], "member_id", m[1], "err", err)
+			continue
+		}
+		if ok {
+			sent++
+		}
+	}
+	return sent, nil
+}
+
+// digestOne holds the member's rows locked while it sends, so SendDue and a second digest run skip them.
+func (s *Sink) digestOne(ctx context.Context, wsID, memberID string) (bool, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `
+		SELECT o.id, o.to_email, o.subject, w.name FROM notification_outbox o
+		JOIN workspaces w ON w.id = o.workspace_id
+		WHERE o.workspace_id = $1 AND o.member_id = $2 AND o.sent_at IS NULL AND o.attempts < $3
+		ORDER BY o.created_at FOR UPDATE OF o SKIP LOCKED`, wsID, memberID, MaxAttempts)
+	if err != nil {
+		return false, err
+	}
+	var ids []string
+	var to, wsName string
+	var body strings.Builder
+	body.WriteString("Here is what happened in Track since your last digest:\n\n")
+	for rows.Next() {
+		var id, subject string
+		if err := rows.Scan(&id, &to, &subject, &wsName); err != nil {
+			rows.Close()
+			return false, err
+		}
+		ids = append(ids, id)
+		body.WriteString("- " + subject + "\n")
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil || len(ids) == 0 {
+		return false, err
+	}
+	if s.baseURL != "" {
+		body.WriteString("\nOpen Track: " + s.baseURL)
+	}
+	subject := fmt.Sprintf("Your Track digest for %s: %d updates", wsName, len(ids))
+	if len(ids) == 1 {
+		subject = fmt.Sprintf("Your Track digest for %s: 1 update", wsName)
+	}
+	if err := s.sender.Send(ctx, to, subject, body.String()); err != nil {
+		if _, uerr := tx.Exec(ctx, `UPDATE notification_outbox SET attempts = attempts + 1, error = $3
+			WHERE workspace_id = $1 AND id = ANY($2)`, wsID, ids, err.Error()); uerr != nil {
+			return false, uerr
+		}
+		return false, errors.Join(err, tx.Commit(ctx))
+	}
+	if _, err := tx.Exec(ctx, `UPDATE notification_outbox SET sent_at = NOW(), error = ''
+		WHERE workspace_id = $1 AND id = ANY($2)`, wsID, ids); err != nil {
+		return false, err
+	}
+	return true, tx.Commit(ctx)
 }

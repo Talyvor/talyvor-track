@@ -383,6 +383,7 @@ func main() {
 			Password: cfg.SMTPPassword, From: cfg.EmailFrom}, os.Getenv("TRACK_INVITE_BASE_URL"))
 		issueNotifiers = append(issueNotifiers, mailSink)
 		go mailSink.Start(ctx, 30*time.Second)
+		go mailSink.StartDigest(ctx) // B39.17: 09:00 UTC, one mail per digest member
 		slog.Info("email: assignment mail enabled", slog.String("smtp_host", cfg.SMTPHost))
 	}
 	issueHandler.WithNotifier(issueNotifiers)

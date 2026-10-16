@@ -211,3 +211,76 @@ func waitFor(t *testing.T, ok func() bool) {
 	}
 	t.Fatal("timed out")
 }
+
+func TestDailyDigestHoldsMailUntilTheRunThenSendsOne(t *testing.T) {
+	d := testutil.New(t)
+	ws := d.Workspace(t)
+	danaID := seedMember(t, d, ws.ID, "Dana", "dana@corp.com")
+	bobID := seedMember(t, d, ws.ID, "Bob", "bob@corp.com")
+	stub, got := smtpStub(t)
+	sink := email.NewSink(d.Pool, stub, "https://track.example")
+	ctx := context.Background()
+
+	noExempt := func(string) bool { return false }
+	r := chi.NewRouter()
+	r.Route("/v1", func(r chi.Router) {
+		r.Use(gatewayauth.Middleware(gwSecret, noExempt))
+		r.Use(authz.Middleware(authz.NewPGResolver(d.Pool), noExempt))
+		email.NewHandler(d.Pool).Mount(r)
+	})
+	pref := "/v1/workspaces/" + ws.ID + "/notification-preferences/digest"
+	if rr := call(r, "GET", pref, "bob@corp.com", ""); rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"email":false`) {
+		t.Fatalf("GET digest before = %d %s, want off by default", rr.Code, rr.Body.String())
+	}
+	if rr := call(r, "PUT", pref, "bob@corp.com", `{"email":true}`); rr.Code != http.StatusOK {
+		t.Fatalf("PUT digest = %d %s", rr.Code, rr.Body.String())
+	}
+
+	assign := func(to, by string) string {
+		iss := d.Issue(t, ws.ID, "")
+		if _, err := d.Pool.Exec(ctx, `UPDATE issues SET assignee_id=$2 WHERE id=$1`, iss.ID, to); err != nil {
+			t.Fatal(err)
+		}
+		sink.IssueUpdated(ctx, ws.ID, iss.TeamID, iss.ID, by, map[string]any{"assignee_id": to})
+		return iss.Identifier
+	}
+	var held []string
+	for range 3 {
+		held = append(held, assign(bobID, danaID))
+	}
+	if _, err := sink.SendDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if mails := got(); len(mails) != 0 {
+		t.Fatalf("a digest member got %d mails before the run: %q", len(mails), mails)
+	}
+
+	// Dana never chose a digest, so her mail goes at once.
+	assign(danaID, bobID)
+	if _, err := sink.SendDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if mails := got(); len(mails) != 1 || !strings.HasPrefix(mails[0], "dana@corp.com\n") {
+		t.Fatalf("stub got %q, want Dana's mail at once", mails)
+	}
+
+	for range 2 { // the second run finds nothing left
+		if _, err := sink.SendDigests(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mails := got()
+	if len(mails) != 2 || !strings.HasPrefix(mails[1], "bob@corp.com\n") || !strings.Contains(mails[1], "3 updates") {
+		t.Fatalf("stub got %q, want one digest to Bob", mails)
+	}
+	for _, id := range held {
+		if !strings.Contains(mails[1], id+" was assigned to you") {
+			t.Fatalf("digest does not name %s: %q", id, mails[1])
+		}
+	}
+	var unsent int
+	if err := d.Pool.QueryRow(ctx, `SELECT count(*) FROM notification_outbox WHERE workspace_id=$1 AND sent_at IS NULL`,
+		ws.ID).Scan(&unsent); err != nil || unsent != 0 {
+		t.Fatalf("unsent outbox rows = %d (%v), want 0", unsent, err)
+	}
+}
