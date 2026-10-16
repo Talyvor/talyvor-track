@@ -20,6 +20,10 @@ type recordedDefault struct {
 }
 
 var recordedDefaults = map[string]recordedDefault{
+	// ── EMAIL BRANDING (B39.18). What a workspace that set no colour or logo gets in its mail.
+	"internal/email/layout.go::DefaultHeaderColor": {`"#060A12"`, "Talyvor's Obsidian heading every unbranded mail; brand-v4 canvas colour, changing it recolours every customer's mail"},
+	"internal/email/layout.go::alt#1":              {`"Talyvor"`, "alt text of the header logo when the workspace is unbranded — what a client that blocks images shows"},
+	"internal/email/layout.go::color#1":            {"DefaultHeaderColor", "a workspace that set a logo but no colour gets Talyvor's header colour"},
 	// ── AUTHORISATION. The role a caller who names none is given. These are the
 	//    highest-stakes rows in the table and a literals-only census would not have them.
 	"internal/guest/handler.go::in.Role#1":    {"GuestRoleViewer", "ROLE a guest invite grants when none is asked for — least privilege, and the only thing holding it there is this line"},

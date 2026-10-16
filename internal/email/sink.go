@@ -26,7 +26,7 @@ const MaxAttempts = 5
 const lease = 10 * time.Minute
 
 type Sender interface {
-	Send(ctx context.Context, to, subject, body string) error
+	Send(ctx context.Context, b Brand, to, subject, body string) error
 }
 
 // Sink is a notifier for the issue handler: assigning an issue to someone else writes one outbox row for the
@@ -115,7 +115,10 @@ func (s *Sink) Start(ctx context.Context, interval time.Duration) {
 	}
 }
 
-type outboxRow struct{ id, workspaceID, to, subject, body string }
+type outboxRow struct {
+	id, workspaceID, to, subject, body string
+	brand                              Brand
+}
 
 // SendDue sends every message that is due and returns how many it tried.
 func (s *Sink) SendDue(ctx context.Context) (int, error) {
@@ -126,19 +129,22 @@ func (s *Sink) SendDue(ctx context.Context) (int, error) {
 		      AND NOT EXISTS (SELECT 1 FROM notification_preferences p
 		                      WHERE p.member_id = notification_outbox.member_id AND p.kind = $3 AND p.email)
 		    ORDER BY due_at LIMIT 50 FOR UPDATE SKIP LOCKED)
-		UPDATE notification_outbox SET attempts = attempts + 1, due_at = NOW() + $2 * INTERVAL '1 second'
-		WHERE id IN (SELECT id FROM due)
-		RETURNING id, workspace_id, to_email, subject, body`, MaxAttempts, int64(lease/time.Second), KindDigest)
+		UPDATE notification_outbox o SET attempts = attempts + 1, due_at = NOW() + $2 * INTERVAL '1 second'
+		FROM workspaces w
+		WHERE o.id IN (SELECT id FROM due) AND w.id = o.workspace_id
+		RETURNING o.id, o.workspace_id, o.to_email, o.subject, o.body, w.name, w.logo_url, w.email_header_color`, MaxAttempts, int64(lease/time.Second), KindDigest)
 	if err != nil {
 		return 0, err
 	}
 	var due []outboxRow
 	for rows.Next() {
 		var r outboxRow
-		if err := rows.Scan(&r.id, &r.workspaceID, &r.to, &r.subject, &r.body); err != nil {
+		var name, logo, color string
+		if err := rows.Scan(&r.id, &r.workspaceID, &r.to, &r.subject, &r.body, &name, &logo, &color); err != nil {
 			rows.Close()
 			return 0, err
 		}
+		r.brand = s.brandFor(name, logo, color)
 		due = append(due, r)
 	}
 	rows.Close()
@@ -146,7 +152,7 @@ func (s *Sink) SendDue(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	for _, r := range due {
-		if err := s.sender.Send(ctx, r.to, r.subject, r.body); err != nil {
+		if err := s.sender.Send(ctx, r.brand, r.to, r.subject, r.body); err != nil {
 			slog.Warn("email: send failed", "id", r.id, "err", err)
 			// Retry after 1, 2, 4, 8 minutes; the lease above covers a crash between claim and here.
 			if _, uerr := s.pool.Exec(ctx, `
@@ -227,7 +233,7 @@ func (s *Sink) digestOne(ctx context.Context, wsID, memberID string) (bool, erro
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `
-		SELECT o.id, o.to_email, o.subject, w.name FROM notification_outbox o
+		SELECT o.id, o.to_email, o.subject, w.name, w.logo_url, w.email_header_color FROM notification_outbox o
 		JOIN workspaces w ON w.id = o.workspace_id
 		WHERE o.workspace_id = $1 AND o.member_id = $2 AND o.sent_at IS NULL AND o.attempts < $3
 		ORDER BY o.created_at FOR UPDATE OF o SKIP LOCKED`, wsID, memberID, MaxAttempts)
@@ -235,12 +241,12 @@ func (s *Sink) digestOne(ctx context.Context, wsID, memberID string) (bool, erro
 		return false, err
 	}
 	var ids []string
-	var to, wsName string
+	var to, wsName, logo, color string
 	var body strings.Builder
 	body.WriteString("Here is what happened in Track since your last digest:\n\n")
 	for rows.Next() {
 		var id, subject string
-		if err := rows.Scan(&id, &to, &subject, &wsName); err != nil {
+		if err := rows.Scan(&id, &to, &subject, &wsName, &logo, &color); err != nil {
 			rows.Close()
 			return false, err
 		}
@@ -258,7 +264,7 @@ func (s *Sink) digestOne(ctx context.Context, wsID, memberID string) (bool, erro
 	if len(ids) == 1 {
 		subject = fmt.Sprintf("Your Track digest for %s: 1 update", wsName)
 	}
-	if err := s.sender.Send(ctx, to, subject, body.String()); err != nil {
+	if err := s.sender.Send(ctx, s.brandFor(wsName, logo, color), to, subject, body.String()); err != nil {
 		if _, uerr := tx.Exec(ctx, `UPDATE notification_outbox SET attempts = attempts + 1, error = $3
 			WHERE workspace_id = $1 AND id = ANY($2)`, wsID, ids, err.Error()); uerr != nil {
 			return false, uerr

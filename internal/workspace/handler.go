@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"regexp"
 
 	"github.com/go-chi/chi/v5"
 
@@ -140,12 +142,36 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &updates) {
 		return
 	}
+	if msg := badBranding(updates); msg != "" {
+		writeErr(w, http.StatusBadRequest, "INVALID_BRANDING", msg)
+		return
+	}
 	out, err := h.store.Update(r.Context(), wsID, updates)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "UPDATE_FAILED", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// badBranding refuses what the workspace's emails would show (B39.18): a colour that is not #rrggbb, or a logo
+// that is not an https URL. Empty clears either back to Talyvor's default.
+func badBranding(updates map[string]any) string {
+	if v, ok := updates["email_header_color"]; ok {
+		if s, isStr := v.(string); !isStr || (s != "" && !hexColor.MatchString(s)) {
+			return "email_header_color must be #rrggbb"
+		}
+	}
+	if v, ok := updates["logo_url"]; ok {
+		s, isStr := v.(string)
+		u, err := url.Parse(s)
+		if !isStr || (s != "" && (err != nil || u.Scheme != "https" || u.Host == "")) {
+			return "logo_url must be an https URL"
+		}
+	}
+	return ""
 }
 
 // Delete marks the workspace deleted: from then on every route answers 410 WORKSPACE_DELETED except

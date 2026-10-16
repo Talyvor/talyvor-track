@@ -23,8 +23,8 @@ func newMockStore(t *testing.T) (*Store, pgxmock.PgxPoolIface) {
 func wsRow(id, slug, plan string) *pgxmock.Rows {
 	now := time.Now().UTC()
 	return pgxmock.NewRows([]string{
-		"id", "name", "slug", "logo_url", "plan", "created_at", "updated_at",
-	}).AddRow(id, "Workspace", slug, "", plan, now, now)
+		"id", "name", "slug", "logo_url", "plan", "email_header_color", "created_at", "updated_at",
+	}).AddRow(id, "Workspace", slug, "", plan, "", now, now)
 }
 
 func TestCreate_InsertsWorkspace(t *testing.T) {
@@ -69,9 +69,9 @@ func TestList_ReturnsAllWorkspaces(t *testing.T) {
 	now := time.Now().UTC()
 	pool.ExpectQuery(`FROM workspaces ORDER BY created_at DESC`).
 		WillReturnRows(pgxmock.NewRows([]string{
-			"id", "name", "slug", "logo_url", "plan", "created_at", "updated_at",
-		}).AddRow("a", "A", "a", "", "free", now, now).
-			AddRow("b", "B", "b", "", "pro", now, now))
+			"id", "name", "slug", "logo_url", "plan", "email_header_color", "created_at", "updated_at",
+		}).AddRow("a", "A", "a", "", "free", "", now, now).
+			AddRow("b", "B", "b", "", "pro", "", now, now))
 
 	out, err := store.List(context.Background())
 	if err != nil {
