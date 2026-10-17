@@ -49,18 +49,18 @@ func TestVote_ObjectGraph_RejectsPostNotOnPublishedBoard(t *testing.T) {
 	}
 
 	// (1) Positive control: a legit vote on the published board's OWN post works.
-	if _, err := fb.Vote(ctx, wsA.Slug, pubBoard.Slug, pubPost.ID, "voter@x.com"); err != nil {
+	if _, _, err := fb.Vote(ctx, wsA.Slug, pubBoard.Slug, pubPost.ID, "voter@x.com"); err != nil {
 		t.Fatalf("legit vote on a published board must succeed: %v", err)
 	}
 
 	// (2) A post on an UNPUBLISHED board must not be votable.
-	if _, err := fb.Vote(ctx, wsB.Slug, privBoard.Slug, privPost.ID, "voter@x.com"); err == nil {
+	if _, _, err := fb.Vote(ctx, wsB.Slug, privBoard.Slug, privPost.ID, "voter@x.com"); err == nil {
 		t.Error("LEAK: vote on a post on an UNPUBLISHED board was allowed")
 	}
 
 	// (3) A post NOT belonging to the slug's board (cross-board) must be refused —
 	//     privPost belongs to wsB/private, not wsA/feedback.
-	if _, err := fb.Vote(ctx, wsA.Slug, pubBoard.Slug, privPost.ID, "voter@x.com"); err == nil {
+	if _, _, err := fb.Vote(ctx, wsA.Slug, pubBoard.Slug, privPost.ID, "voter@x.com"); err == nil {
 		t.Error("LEAK: vote on a post not belonging to the slug's board was allowed")
 	}
 

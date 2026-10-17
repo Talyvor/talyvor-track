@@ -45,7 +45,7 @@ MUST_NOT_READ = "Custom field (Target Release Date)"
 def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": "talyvor-w34-probe"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
             return r.status, r.headers.get("Content-Type", ""), r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.headers.get("Content-Type", ""), e.read()

@@ -65,15 +65,16 @@ export const featureBoardApi = {
     );
   },
   vote(wsSlug: string, boardSlug: string, postID: string, email: string) {
-    return publicRequest<{ vote_count: number; voted: boolean }>(
+    // vote_token is empty when this email had already voted.
+    return publicRequest<{ vote_count: number; voted: boolean; vote_token: string }>(
       `/v1/public/boards/${wsSlug}/${boardSlug}/posts/${postID}/vote`,
       { method: "POST", body: { email } },
     );
   },
-  unvote(wsSlug: string, boardSlug: string, postID: string, email: string) {
+  unvote(wsSlug: string, boardSlug: string, postID: string, voteToken: string) {
     return publicRequest<{ vote_count: number; voted: boolean }>(
       `/v1/public/boards/${wsSlug}/${boardSlug}/posts/${postID}/vote`,
-      { method: "DELETE", body: { email } },
+      { method: "DELETE", body: { vote_token: voteToken } },
     );
   },
 

@@ -461,11 +461,12 @@ func (s *Store) IssueTotalSec(ctx context.Context, issueID string) (int, error) 
 // workspace. The handler maps it to 404 (a foreign id and a nonexistent id are indistinguishable).
 var ErrNotFound = errors.New("timetracking: not found in workspace")
 
-func (s *Store) Delete(ctx context.Context, id, workspaceID string) error {
+func (s *Store) Delete(ctx context.Context, id, workspaceID, callerID string, isOwner bool) error {
 	if s.pool == nil {
 		return errors.New("timetracking: store has no pool")
 	}
-	ct, err := s.pool.Exec(ctx, `DELETE FROM time_entries WHERE id = $1 AND workspace_id = $2`, id, workspaceID)
+	ct, err := s.pool.Exec(ctx, `DELETE FROM time_entries WHERE id = $1 AND workspace_id = $2 AND (member_id = $3 OR $4)`,
+		id, workspaceID, callerID, isOwner)
 	if err != nil {
 		return err
 	}

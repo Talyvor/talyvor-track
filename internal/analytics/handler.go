@@ -255,6 +255,7 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	// Past this point the response is committed and a write failure means the client went away;
 	// there is no status left to change, so it is logged rather than swallowed silently.
+	// nosemgrep: no-direct-write-to-responsewriter -- a CSV attachment with Content-Type text/csv, never rendered as HTML. INVALIDATED IF the Content-Type above stops being text/csv
 	if _, werr := w.Write(buf.Bytes()); werr != nil {
 		slog.Warn("analytics: export write failed",
 			slog.String("report", report), slog.String("err", werr.Error()))

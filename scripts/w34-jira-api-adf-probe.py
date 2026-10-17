@@ -102,7 +102,7 @@ def post(path, body, host=HOST):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
             return r.status, json.loads(r.read())
     except urllib.error.HTTPError as e:
         try:

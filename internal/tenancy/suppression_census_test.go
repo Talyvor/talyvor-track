@@ -50,6 +50,10 @@ var suppressionCeiling = map[string]int{
 	"operate-by-id-write-requires-workspace-scope-sprintf": 1,
 	"child-insert-requires-parent-workspace-guard":         3,
 	"caller-workspace-id-query-needs-authorization":        1,
+	// B42.7: Semgrep's default ruleset (p/default), not tenancy locks; each reason is at the code.
+	"pgx-sqli":                          3,
+	"no-direct-write-to-responsewriter": 1,
+	"math-random-used":                  1,
 }
 
 // Floor against a blinded WALK. 114 non-test .go files under internal/ + cmd/ at this merge.

@@ -170,17 +170,18 @@ func TestUnauthenticatedSurface_ExemptRoutesEnforceTheirOwnAuth(t *testing.T) {
 	})
 
 	// ── 3. POST .../posts — ANONYMOUS WRITE, bounded by public + AllowAnonymous ─────────────────
-	t.Run("anonymous post requires an email unless the board opted in", func(t *testing.T) {
+	t.Run("anonymous post is refused unless the board opted in", func(t *testing.T) {
 		ok := anon(t, h, http.MethodPost, "/v1/public/boards/"+slugA+"/"+pubBoard.Slug+"/posts",
 			map[string]string{"title": "anon idea"})
 		if ok.Code != http.StatusCreated {
 			t.Fatalf("anonymous post to an AllowAnonymous board = %d %s, want 201", ok.Code, body(ok))
 		}
+		// B42.7: a typed email is not a verified one, so it does not open a board that has not opted in.
 		needsEmail := anon(t, h, http.MethodPost, "/v1/public/boards/"+slugA+"/"+namedBoard.Slug+"/posts",
-			map[string]string{"title": "no email"})
-		if needsEmail.Code != http.StatusBadRequest || !strings.Contains(body(needsEmail), "EMAIL_REQUIRED") {
-			t.Errorf("email-less post to a board WITHOUT AllowAnonymous = %d %s, want 400 "+
-				"EMAIL_REQUIRED", needsEmail.Code, body(needsEmail))
+			map[string]string{"title": "typed email", "author_email": "x@corp.com"})
+		if needsEmail.Code != http.StatusForbidden || !strings.Contains(body(needsEmail), "VERIFIED_EMAIL_REQUIRED") {
+			t.Errorf("typed-email post to a board WITHOUT AllowAnonymous = %d %s, want 403 "+
+				"VERIFIED_EMAIL_REQUIRED", needsEmail.Code, body(needsEmail))
 		}
 		toPrivate := anon(t, h, http.MethodPost, "/v1/public/boards/"+slugB+"/"+privBoard.Slug+"/posts",
 			map[string]string{"title": "should not land", "author_email": "x@corp.com"})
@@ -197,6 +198,12 @@ func TestUnauthenticatedSurface_ExemptRoutesEnforceTheirOwnAuth(t *testing.T) {
 		if ok.Code != http.StatusOK {
 			t.Fatalf("vote on the board's OWN post = %d %s, want 200", ok.Code, body(ok))
 		}
+		var voted struct {
+			VoteToken string `json:"vote_token"`
+		}
+		if err := json.Unmarshal(ok.Body.Bytes(), &voted); err != nil || voted.VoteToken == "" {
+			t.Fatalf("vote returned no vote_token: %s", body(ok))
+		}
 		// The dangerous shape: a public board's slug in the path, a foreign post id in the body.
 		crossed := anon(t, h, http.MethodPost,
 			"/v1/public/boards/"+slugA+"/"+pubBoard.Slug+"/posts/"+privPost.ID+"/vote",
@@ -207,13 +214,13 @@ func TestUnauthenticatedSurface_ExemptRoutesEnforceTheirOwnAuth(t *testing.T) {
 		}
 		unvoteOK := anon(t, h, http.MethodDelete,
 			"/v1/public/boards/"+slugA+"/"+pubBoard.Slug+"/posts/"+pubPost.ID+"/vote",
-			map[string]string{"email": "voter@corp.com"})
+			map[string]string{"vote_token": voted.VoteToken})
 		if unvoteOK.Code != http.StatusOK {
 			t.Fatalf("unvote on the board's OWN post = %d %s, want 200", unvoteOK.Code, body(unvoteOK))
 		}
 		crossedUnvote := anon(t, h, http.MethodDelete,
 			"/v1/public/boards/"+slugA+"/"+pubBoard.Slug+"/posts/"+privPost.ID+"/vote",
-			map[string]string{"email": "voter@corp.com"})
+			map[string]string{"vote_token": voted.VoteToken})
 		if crossedUnvote.Code == http.StatusOK {
 			t.Errorf("an anonymous UNVOTE reached a post on a private board in another workspace: %s",
 				body(crossedUnvote))

@@ -224,7 +224,13 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "FORBIDDEN", "workspace not authorized")
 		return
 	}
-	if err := h.store.Delete(r.Context(), chi.URLParam(r, "id"), wsID); err != nil {
+	callerID, ok := authz.MemberID(r.Context())
+	if !ok {
+		writeErr(w, http.StatusForbidden, "FORBIDDEN", "workspace not authorized")
+		return
+	}
+	// owner-of-entry-or-workspace-owner: another member's entry reads as not found.
+	if err := h.store.Delete(r.Context(), chi.URLParam(r, "id"), wsID, callerID, authz.IsOwner(r.Context())); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "NOT_FOUND", "not found")
 			return

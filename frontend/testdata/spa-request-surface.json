@@ -2,7 +2,7 @@
   "sites": [
     {
       "file": "src/api/featureboard.ts",
-      "line": 74,
+      "line": 75,
       "verb": "DELETE",
       "path": "/v1/public/boards/{}/{}/posts/{}/vote",
       "queryFields": [],
@@ -10,7 +10,7 @@
       "hasBody": true,
       "optionsSpread": false,
       "bodyFields": [
-        "email"
+        "vote_token"
       ],
       "bodyUnbounded": false,
       "bodyNestedFields": []
@@ -286,7 +286,7 @@
     },
     {
       "file": "src/api/featureboard.ts",
-      "line": 93,
+      "line": 94,
       "verb": "GET",
       "path": "/v1/workspaces/{}/boards/{}/stats",
       "queryFields": [],
@@ -299,7 +299,7 @@
     },
     {
       "file": "src/api/featureboard.ts",
-      "line": 84,
+      "line": 85,
       "verb": "GET",
       "path": "/v1/workspaces/{}/boards",
       "queryFields": [],
@@ -693,7 +693,7 @@
     },
     {
       "file": "src/api/featureboard.ts",
-      "line": 101,
+      "line": 102,
       "verb": "PATCH",
       "path": "/v1/workspaces/{}/boards/{}/posts/{}",
       "queryFields": [],
@@ -816,7 +816,7 @@
     },
     {
       "file": "src/api/featureboard.ts",
-      "line": 68,
+      "line": 69,
       "verb": "POST",
       "path": "/v1/public/boards/{}/{}/posts/{}/vote",
       "queryFields": [],
@@ -849,7 +849,7 @@
     },
     {
       "file": "src/api/featureboard.ts",
-      "line": 112,
+      "line": 113,
       "verb": "POST",
       "path": "/v1/workspaces/{}/boards/{}/posts/{}/convert",
       "queryFields": [],
@@ -865,7 +865,7 @@
     },
     {
       "file": "src/api/featureboard.ts",
-      "line": 87,
+      "line": 88,
       "verb": "POST",
       "path": "/v1/workspaces/{}/boards",
       "queryFields": [],

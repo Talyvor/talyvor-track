@@ -70,8 +70,15 @@ spec:
       labels:
         app: envoy
     spec:
+      # The image's entrypoint drops to its envoy user (101) when started as root; start as it instead.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
       containers:
         - name: envoy
+          securityContext:
+            allowPrivilegeEscalation: false
           # The Envoy edge-infra's edge-proxy chart pins (deploy/local/lib.sh).
           image: envoyproxy/envoy:v1.30.0@sha256:d7d501253a93f0b5fce8e0d3a24f3bef67372c50ed7ea922279c72fc1200be58
           ports:
