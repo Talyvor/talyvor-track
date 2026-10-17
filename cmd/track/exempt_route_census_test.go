@@ -189,9 +189,9 @@ var exemptRoutes = map[string]string{
 
 	"Get /v1/public/boards/{wsSlug}/{boardSlug}/":                       "ANONYMOUS BY DESIGN. Store.GetPublicBoard resolves by slug with `AND b.public = true`, so a private workspace can host one public board without exposing the others.",
 	"Get /v1/public/boards/{wsSlug}/{boardSlug}/posts":                  "same public-board filter.",
-	"Post /v1/public/boards/{wsSlug}/{boardSlug}/posts":                 "ANONYMOUS WRITE. Same b.public filter, plus board.AllowAnonymous: a board that has not opted in requires an author email.",
+	"Post /v1/public/boards/{wsSlug}/{boardSlug}/posts":                 "ANONYMOUS WRITE. Same b.public filter, plus board.AllowAnonymous: a board that has not opted in takes no public post (a typed email is not verified).",
 	"Post /v1/public/boards/{wsSlug}/{boardSlug}/posts/{postID}/vote":   "ANONYMOUS WRITE. Same b.public filter.",
-	"Delete /v1/public/boards/{wsSlug}/{boardSlug}/posts/{postID}/vote": "ANONYMOUS WRITE. Same b.public filter.",
+	"Delete /v1/public/boards/{wsSlug}/{boardSlug}/posts/{postID}/vote": "ANONYMOUS WRITE. Same b.public filter, plus the vote_token issued when the vote was cast.",
 	"Get /v1/public/issue-boards/{token}":                               "ANONYMOUS BY DESIGN (B27.30), READ-ONLY. issueboard.Store.Public resolves the token with `sh.revoked_at IS NULL` and `w.deleted_at IS NULL`, and answers only identifier, title, status, priority and updated_at of that workspace's issues (or one project's).",
 }
 

@@ -762,7 +762,7 @@ def census(scripts_dir=SCRIPTS):
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf), \
                     _no_side_effects():
-                exec(code, ns)
+                exec(code, ns)  # nosemgrep: exec-detected -- runs code read from a file in this repository, never from input
         except Exception as exc:
             sys.modules.pop(modname, None)
             unreached.append((name, "EXEC-FAILED: %s: %s" % (type(exc).__name__, exc)))

@@ -34,7 +34,7 @@ OLD_SEARCH_PATH = "/rest/api/3/search"
 
 def fetch_spec():
     req = urllib.request.Request(SPEC_URL, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
+    with urllib.request.urlopen(req, timeout=120) as resp:  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
         if resp.status != 200:
             sys.exit(f"spec fetch: HTTP {resp.status}")
         return json.loads(resp.read())

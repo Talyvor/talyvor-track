@@ -25,6 +25,23 @@ const filters: { value: FeaturePostStatus | "all"; label: string }[] = [
 
 const emailKey = "track_board_voter_email";
 const nameKey = "track_board_voter_name";
+// postID → the token the server issued for this browser's vote; only it can remove the vote.
+const voteTokensKey = "track_board_vote_tokens";
+
+function readVoteTokens(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(voteTokensKey) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeVoteToken(postID: string, token: string | null) {
+  const tokens = readVoteTokens();
+  if (token) tokens[postID] = token;
+  else delete tokens[postID];
+  localStorage.setItem(voteTokensKey, JSON.stringify(tokens));
+}
 
 export function PublicBoardPage({ wsSlug, boardSlug }: PublicBoardProps) {
   const [filter, setFilter] = useState<FeaturePostStatus | "all">("all");
@@ -54,10 +71,18 @@ export function PublicBoardPage({ wsSlug, boardSlug }: PublicBoardProps) {
 
   const qc = useQueryClient();
   const vote = useMutation({
-    mutationFn: (post: FeaturePost) =>
-      post.has_voted
-        ? featureBoardApi.unvote(wsSlug, boardSlug, post.id, email)
-        : featureBoardApi.vote(wsSlug, boardSlug, post.id, email),
+    mutationFn: async (post: FeaturePost) => {
+      if (post.has_voted) {
+        const res = await featureBoardApi.unvote(
+          wsSlug, boardSlug, post.id, readVoteTokens()[post.id] ?? "",
+        );
+        writeVoteToken(post.id, null);
+        return res;
+      }
+      const res = await featureBoardApi.vote(wsSlug, boardSlug, post.id, email);
+      if (res.vote_token) writeVoteToken(post.id, res.vote_token);
+      return res;
+    },
     onMutate: async (post) => {
       // Optimistic toggle: apply the vote delta on the current list
       // before the network round-trip lands.

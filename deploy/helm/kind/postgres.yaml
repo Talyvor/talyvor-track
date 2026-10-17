@@ -23,8 +23,15 @@ spec:
       labels:
         app: postgres
     spec:
+      # The image's postgres user (999); PGDATA and the socket directory are writable by it.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
       containers:
         - name: postgres
+          securityContext:
+            allowPrivilegeEscalation: false
           # The same image Track's CI tests against: migration 0007 needs `vector`.
           image: pgvector/pgvector:pg16
           env:

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
-	"math/rand/v2"
+	"math/rand/v2" // nosemgrep: math-random-used -- seeded Monte Carlo sampling for a delivery forecast; never an id, token or secret. INVALIDATED IF this package starts minting ids or tokens
 	"slices"
 	"time"
 )

@@ -73,7 +73,7 @@ def load_jobpin():
     start = src.index("class JobPin:")
     end = src.index("\ndef anchored(", start)
     ns: dict = {"re": re}
-    exec(compile(src[start:end], str(CAMPAIGN), "exec"), ns)
+    exec(compile(src[start:end], str(CAMPAIGN), "exec"), ns)  # nosemgrep: exec-detected -- runs code read from a file in this repository, never from input
     return ns["JobPin"]
 
 

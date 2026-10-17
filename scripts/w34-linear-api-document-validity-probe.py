@@ -79,7 +79,7 @@ def post(url, query, variables=None):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=25) as r:
+        with urllib.request.urlopen(req, timeout=25) as r:  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
             return r.status, json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         raw = e.read().decode()

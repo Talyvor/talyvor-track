@@ -55,7 +55,7 @@ def post(url, payload, timeout=25):
         url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}
     )
     try:
-        r = urllib.request.urlopen(req, timeout=timeout)
+        r = urllib.request.urlopen(req, timeout=timeout)  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
         return r.status, json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         try:
@@ -72,7 +72,7 @@ def fail(msg):
 def main():
     print("── NEGATIVE CONTROLS FIRST, so a 200 is not a blanket answer ──")
     try:
-        urllib.request.urlopen("https://api-linear-fabricated-zzz.app/graphql", timeout=15)
+        urllib.request.urlopen("https://api-linear-fabricated-zzz.app/graphql", timeout=15)  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
         fail("a fabricated host ANSWERED — this machine is behind something that answers everything")
     except urllib.error.HTTPError:
         fail("a fabricated host returned an HTTP status — not a clean non-resolution")

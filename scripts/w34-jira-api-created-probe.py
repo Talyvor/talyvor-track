@@ -43,7 +43,7 @@ def post(base, path, body, timeout=TIMEOUT):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
@@ -53,7 +53,7 @@ def post(base, path, body, timeout=TIMEOUT):
 
 def get(url, timeout=TIMEOUT):
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        with urllib.request.urlopen(url, timeout=timeout) as r:  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()

@@ -45,8 +45,10 @@ func NewHandler(store *Store, issues issueReader, inviteBaseURL string) *Handler
 // and the public invite/guest endpoints under /v1/invite/... and
 // /v1/guest/... — public routes intentionally bypass member auth.
 func (h *Handler) Mount(r chi.Router) {
-	// Admin (member-authenticated in production).
+	// Admin (member-authenticated in production). Owner-only: Track's roles are owner and member, so the
+	// owner is the admin, and a plain member must not invite, see or revoke guests.
 	r.Route("/workspaces/{wsID}/guests", func(r chi.Router) {
+		r.Use(authz.RequireOwner)
 		r.Get("/", h.List)
 		r.Post("/invite", h.Invite)
 		r.Delete("/{id}", h.Revoke)

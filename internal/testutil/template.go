@@ -60,6 +60,7 @@ func schemaTemplate(t *testing.T, ctx context.Context, admin string) string {
 	defer func() { _, _ = admConn.Exec(ctx, `SELECT pg_advisory_unlock($1)`, templateLockKey) }()
 
 	var exists bool
+	// nosemgrep: pgx-sqli -- a constant query; the name is bound as $1. INVALIDATED IF the name is spliced into the SQL
 	if err := admConn.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)`, name).Scan(&exists); err != nil {
 		t.Fatalf("testutil: look up template: %v", err)
@@ -78,9 +79,11 @@ func schemaTemplate(t *testing.T, ctx context.Context, admin string) string {
 			t.Fatalf("testutil: migrate template: %v", err)
 		}
 		_ = migConn.Close(ctx)
+		// nosemgrep: pgx-sqli -- identifiers cannot be bound; quoteIdent is pgx.Identifier.Sanitize over mustSafeIdent. INVALIDATED IF an identifier skips quoteIdent
 		if _, err := admConn.Exec(ctx, "ALTER DATABASE "+quoteIdent(build)+" RENAME TO "+quoteIdent(name)); err != nil {
 			t.Fatalf("testutil: publish template: %v", err)
 		}
+		// nosemgrep: pgx-sqli -- identifiers cannot be bound; quoteIdent is pgx.Identifier.Sanitize over mustSafeIdent. INVALIDATED IF an identifier skips quoteIdent
 		if _, err := admConn.Exec(ctx, "ALTER DATABASE "+quoteIdent(name)+" WITH ALLOW_CONNECTIONS false"); err != nil {
 			t.Fatalf("testutil: seal template: %v", err)
 		}

@@ -40,7 +40,7 @@ def post(url, payload, timeout=25):
         url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}
     )
     try:
-        r = urllib.request.urlopen(req, timeout=timeout)
+        r = urllib.request.urlopen(req, timeout=timeout)  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
         return r.status, json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read().decode())
@@ -63,13 +63,13 @@ def shipped_query():
 def main():
     print("── NEGATIVE CONTROLS FIRST, so a 200/401 is not a blanket answer ──")
     try:
-        urllib.request.urlopen("https://api.linear-talyvor-fake.app/graphql", timeout=10)
+        urllib.request.urlopen("https://api.linear-talyvor-fake.app/graphql", timeout=10)  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
         print("  ✗ a fabricated host RESOLVED — every result below is suspect")
         return 1
     except Exception as e:
         print(f"  ✓ fabricated host does not resolve ({type(e).__name__})")
     try:
-        urllib.request.urlopen("https://api.linear.app/talyvorTotallyFakePath", timeout=15)
+        urllib.request.urlopen("https://api.linear.app/talyvorTotallyFakePath", timeout=15)  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
         print("  ✗ a fabricated path on the REAL host answered 200 — the host answers anything")
         return 1
     except urllib.error.HTTPError as e:

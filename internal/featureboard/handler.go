@@ -302,9 +302,11 @@ func (h *Handler) PublicCreatePost(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &in) {
 		return
 	}
-	if !board.AllowAnonymous && in.AuthorEmail == "" {
-		writeErr(w, http.StatusBadRequest, "EMAIL_REQUIRED",
-			"this board requires a verified email to post")
+	// A typed email is not a verified one, and the public board has no verification step, so a board
+	// that requires a verified author takes no public posts rather than trusting whatever was typed.
+	if !board.AllowAnonymous {
+		writeErr(w, http.StatusForbidden, "VERIFIED_EMAIL_REQUIRED",
+			"this board accepts posts only from a verified email, and a typed email is not verified")
 		return
 	}
 	post, err := h.store.CreatePost(r.Context(), FeaturePost{
@@ -332,26 +334,32 @@ func (h *Handler) PublicVote(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &in) {
 		return
 	}
-	count, err := h.store.Vote(r.Context(), chi.URLParam(r, "wsSlug"), chi.URLParam(r, "boardSlug"), postID, in.Email)
+	count, token, err := h.store.Vote(r.Context(), chi.URLParam(r, "wsSlug"), chi.URLParam(r, "boardSlug"), postID, in.Email)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "VOTE_FAILED", err.Error())
 		return
 	}
+	// vote_token is empty when this email had already voted: only the first caller holds it.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"vote_count": count,
 		"voted":      true,
+		"vote_token": token,
 	})
 }
 
 func (h *Handler) PublicUnvote(w http.ResponseWriter, r *http.Request) {
 	postID := chi.URLParam(r, "postID")
 	var in struct {
-		Email string `json:"email"`
+		VoteToken string `json:"vote_token"`
 	}
 	if !httpx.DecodeJSON(w, r, &in) {
 		return
 	}
-	count, err := h.store.Unvote(r.Context(), chi.URLParam(r, "wsSlug"), chi.URLParam(r, "boardSlug"), postID, in.Email)
+	count, err := h.store.Unvote(r.Context(), chi.URLParam(r, "wsSlug"), chi.URLParam(r, "boardSlug"), postID, in.VoteToken)
+	if errors.Is(err, ErrVoteToken) {
+		writeErr(w, http.StatusForbidden, "VOTE_TOKEN_INVALID", err.Error())
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "UNVOTE_FAILED", err.Error())
 		return

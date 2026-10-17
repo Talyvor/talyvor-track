@@ -11,6 +11,9 @@ package featureboard
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -416,31 +419,50 @@ func (s *Store) assertPostOnPublicBoard(ctx context.Context, wsSlug, boardSlug, 
 	return nil
 }
 
+// ErrVoteToken is returned by Unvote when the token matches no vote on the post.
+var ErrVoteToken = errors.New("featureboard: vote token does not match a vote on this post")
+
+func hashVoteToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
 // Vote inserts the (post, email) record and re-syncs vote_count. The
 // dedupe + count refresh sit inside one transaction so concurrent
-// votes can't double-count or under-count.
-func (s *Store) Vote(ctx context.Context, wsSlug, boardSlug, postID, email string) (int, error) {
+// votes can't double-count or under-count. The returned token is the
+// only way to remove the vote; it is empty when the email had already
+// voted, so typing someone else's email never yields their token.
+func (s *Store) Vote(ctx context.Context, wsSlug, boardSlug, postID, email string) (int, string, error) {
 	if s.pool == nil {
-		return 0, errors.New("featureboard: store has no pool")
+		return 0, "", errors.New("featureboard: store has no pool")
 	}
 	if postID == "" || email == "" {
-		return 0, errors.New("featureboard: post_id and email required")
+		return 0, "", errors.New("featureboard: post_id and email required")
 	}
 	if err := s.assertPostOnPublicBoard(ctx, wsSlug, boardSlug, postID); err != nil {
-		return 0, err
+		return 0, "", err
 	}
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return 0, "", fmt.Errorf("featureboard: vote token: %w", err)
+	}
+	token := hex.EncodeToString(buf)
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("featureboard: vote begin: %w", err)
+		return 0, "", fmt.Errorf("featureboard: vote begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO feature_votes (post_id, email) VALUES ($1, $2)
+	ct, err := tx.Exec(ctx,
+		`INSERT INTO feature_votes (post_id, email, token_hash) VALUES ($1, $2, $3)
         ON CONFLICT (post_id, email) DO NOTHING`,
-		postID, strings.ToLower(strings.TrimSpace(email)),
-	); err != nil {
-		return 0, fmt.Errorf("featureboard: vote insert: %w", err)
+		postID, strings.ToLower(strings.TrimSpace(email)), hashVoteToken(token),
+	)
+	if err != nil {
+		return 0, "", fmt.Errorf("featureboard: vote insert: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		token = ""
 	}
 
 	var count int64
@@ -452,23 +474,24 @@ func (s *Store) Vote(ctx context.Context, wsSlug, boardSlug, postID, email strin
         WHERE id = $1 RETURNING vote_count`,
 		postID,
 	).Scan(&count); err != nil {
-		return 0, fmt.Errorf("featureboard: vote update: %w", err)
+		return 0, "", fmt.Errorf("featureboard: vote update: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("featureboard: vote commit: %w", err)
+		return 0, "", fmt.Errorf("featureboard: vote commit: %w", err)
 	}
-	return int(count), nil
+	return int(count), token, nil
 }
 
-// Unvote removes the vote and re-syncs vote_count. Same transaction
-// shape as Vote so the count is always consistent.
-func (s *Store) Unvote(ctx context.Context, wsSlug, boardSlug, postID, email string) (int, error) {
+// Unvote removes the vote whose token the caller holds and re-syncs
+// vote_count. Same transaction shape as Vote so the count is always
+// consistent. An email alone proves nothing, so it is not accepted.
+func (s *Store) Unvote(ctx context.Context, wsSlug, boardSlug, postID, token string) (int, error) {
 	if s.pool == nil {
 		return 0, errors.New("featureboard: store has no pool")
 	}
-	if postID == "" || email == "" {
-		return 0, errors.New("featureboard: post_id and email required")
+	if postID == "" || token == "" {
+		return 0, errors.New("featureboard: post_id and vote_token required")
 	}
 	if err := s.assertPostOnPublicBoard(ctx, wsSlug, boardSlug, postID); err != nil {
 		return 0, err
@@ -479,11 +502,15 @@ func (s *Store) Unvote(ctx context.Context, wsSlug, boardSlug, postID, email str
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx,
-		`DELETE FROM feature_votes WHERE post_id = $1 AND email = $2`,
-		postID, strings.ToLower(strings.TrimSpace(email)),
-	); err != nil {
+	ct, err := tx.Exec(ctx,
+		`DELETE FROM feature_votes WHERE post_id = $1 AND token_hash = $2`,
+		postID, hashVoteToken(token),
+	)
+	if err != nil {
 		return 0, fmt.Errorf("featureboard: unvote delete: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return 0, ErrVoteToken
 	}
 	var count int64
 	// nosemgrep: operate-by-id-write-requires-workspace-scope -- public feedback board: assertPostOnPublicBoard(wsSlug, boardSlug, postID) above proves the post is on the named public board before this recount. Votes are email-identified, not workspace-membership — there is no authorized workspace to scope to. INVALIDATED IF the assertPostOnPublicBoard(wsSlug, boardSlug, postID) guard is removed or moved BELOW this recount (the post must be proven on the named public board before the by-id write).

@@ -161,19 +161,19 @@ func TestVote_IncrementsAndDedupes(t *testing.T) {
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	pool.ExpectBegin()
 	pool.ExpectExec(`INSERT INTO feature_votes`).
-		WithArgs("p-1", "alice@example.com").
+		WithArgs("p-1", "alice@example.com", pgxmock.AnyArg()).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 	pool.ExpectQuery(`UPDATE feature_posts SET vote_count`).
 		WithArgs("p-1").
 		WillReturnRows(pgxmock.NewRows([]string{"vote_count"}).AddRow(int64(1)))
 	pool.ExpectCommit()
 
-	count, err := store.Vote(context.Background(), "acme", "feedback", "p-1", "alice@example.com")
+	count, token, err := store.Vote(context.Background(), "acme", "feedback", "p-1", "alice@example.com")
 	if err != nil {
 		t.Fatalf("Vote: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("count = %d", count)
+	if count != 1 || token == "" {
+		t.Errorf("count = %d token = %q", count, token)
 	}
 }
 
@@ -184,14 +184,14 @@ func TestUnvote_Decrements(t *testing.T) {
 		WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
 	pool.ExpectBegin()
 	pool.ExpectExec(`DELETE FROM feature_votes`).
-		WithArgs("p-1", "alice@example.com").
+		WithArgs("p-1", pgxmock.AnyArg()).
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
 	pool.ExpectQuery(`UPDATE feature_posts SET vote_count`).
 		WithArgs("p-1").
 		WillReturnRows(pgxmock.NewRows([]string{"vote_count"}).AddRow(int64(0)))
 	pool.ExpectCommit()
 
-	count, err := store.Unvote(context.Background(), "acme", "feedback", "p-1", "alice@example.com")
+	count, err := store.Unvote(context.Background(), "acme", "feedback", "p-1", "tok")
 	if err != nil {
 		t.Fatalf("Unvote: %v", err)
 	}

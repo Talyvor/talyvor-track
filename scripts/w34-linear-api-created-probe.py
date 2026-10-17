@@ -33,7 +33,7 @@ def gql(query, url=URL, timeout=TIMEOUT):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # nosemgrep: dynamic-urllib-use-detected -- operator-run probe of a fixed vendor API URL; no request input reaches it
             return r.status, json.loads(r.read())
     except urllib.error.HTTPError as e:
         try:
