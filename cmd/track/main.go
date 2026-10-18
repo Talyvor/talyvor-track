@@ -524,6 +524,7 @@ func main() {
 		milestoneHandler.Mount(r)
 		notificationHandler.Mount(r)
 		lensHandler.Mount(r)
+		lensintegration.NewSyncSpend(lensClient, issueStore, workspaceStore).Mount(r) // B17.242: credit from the caller's own Lens token
 		aiHandler.Mount(r)
 		automationHandler.Mount(r)
 		analyticsHandler.Mount(r)

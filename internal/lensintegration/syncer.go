@@ -2,6 +2,7 @@ package lensintegration
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sort"
 	"time"
@@ -66,15 +67,19 @@ func NewSyncer(client *Client, updater costUpdater, workspaces workspaceLister) 
 // is counted and logged SEPARATELY rather than folded into the unattributed total — a number that
 // cannot be deduplicated must not be added to one that can.
 func (s *Syncer) SyncFeatureSpend(ctx context.Context, workspaceID string) error {
-	return s.syncLensWorkspace(ctx, workspaceID, []string{workspaceID})
+	if _, err := s.syncLensWorkspace(ctx, workspaceID, []string{workspaceID}); errors.Is(err, ErrNotConfigured) {
+		return err
+	}
+	return nil
 }
 
 // syncLensWorkspace is SyncFeatureSpend for spend Lens holds under lensWorkspaceID, landed in the Track
 // workspace(s) billed to it (B17.220). With more than one, each row goes to the one workspace holding the
 // issue it names; none or several, and it lands unattributed under the first, never guessed onto an issue.
-func (s *Syncer) syncLensWorkspace(ctx context.Context, lensWorkspaceID string, trackWorkspaces []string) error {
+// Returns how many rows newly landed on an issue, and the Lens read's error (already logged).
+func (s *Syncer) syncLensWorkspace(ctx context.Context, lensWorkspaceID string, trackWorkspaces []string) (int, error) {
 	if s.client == nil || !s.client.IsConfigured() {
-		return ErrNotConfigured
+		return 0, ErrNotConfigured
 	}
 	workspaceID := trackWorkspaces[0]
 	rows, err := s.client.GetSpendByRequest(ctx, lensWorkspaceID, 1)
@@ -83,7 +88,7 @@ func (s *Syncer) syncLensWorkspace(ctx context.Context, lensWorkspaceID string, 
 			slog.String("lens_workspace_id", lensWorkspaceID),
 			slog.String("err", err.Error()),
 		)
-		return nil
+		return 0, err
 	}
 	var attributed, unattributed, undedupable int
 	var unattributedCost, undedupableCost float64
@@ -153,7 +158,7 @@ func (s *Syncer) syncLensWorkspace(ctx context.Context, lensWorkspaceID string, 
 		slog.Float64("undedupable_cost_usd", undedupableCost),
 		slog.Int("total_rows", len(rows)),
 	)
-	return nil
+	return attributed, nil
 }
 
 // StartSync runs SyncFeatureSpend across every workspace on a ticker.
@@ -248,6 +253,6 @@ func (s *Syncer) runOnce(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		_ = s.syncLensWorkspace(ctx, ws, targets[ws])
+		_, _ = s.syncLensWorkspace(ctx, ws, targets[ws])
 	}
 }
