@@ -391,6 +391,7 @@ var routesWithNoSPACaller = map[string]string{
 	"GET /v1/public/issue-boards/{}":                           "talyvor-suite BFF — B27.30, GET /api/public/boards/{token} (the signed-out board page)",
 	"GET /v1/workspaces/{}/issue-boards":                       "talyvor-suite BFF — B27.30, GET /api/track/boards (the workspace's live links)",
 	"POST /v1/workspaces/{}/issue-boards":                      "talyvor-suite BFF — B27.30, POST /api/track/boards (turn a board link on)",
+	"POST /v1/workspaces/{}/lens/sync-spend":                   "talyvor-suite BFF — B17.228 (to be wired), after a Chat answer that carried an issue",
 }
 
 func TestRoutesWithNoSPACallerAreTheKnownSet(t *testing.T) {
