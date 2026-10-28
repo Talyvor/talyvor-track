@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/talyvor/track/internal/safehttp"
@@ -105,6 +106,15 @@ func postJSON(ctx context.Context, client *http.Client, url string, headers map[
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return resp.StatusCode, resp.Header, nil, err
+	}
+	// A provider error can echo the credential, and error text is stored and logged: scrub it here.
+	for _, v := range headers {
+		_, cred, _ := strings.Cut(v, " ")
+		for _, secret := range []string{v, cred} {
+			if len(secret) >= 8 {
+				b = bytes.ReplaceAll(b, []byte(secret), []byte("[redacted]"))
+			}
+		}
 	}
 	return resp.StatusCode, resp.Header, b, nil
 }

@@ -17,8 +17,26 @@ import (
 // ErrBlockedAddress is returned when a fetch targets a non-public (SSRF-sensitive) address.
 var ErrBlockedAddress = errors.New("safehttp: refusing to connect to a non-public address")
 
+// reserved are ranges the net.IP predicates miss: CGNAT (Alibaba Cloud's metadata endpoint 100.100.100.200
+// and tailnets live there), "this network", IETF assignments, benchmarking, class E and broadcast, and the
+// NAT64 prefixes, which reach any IPv4 address — internal ones included — through a translator.
+var reserved = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, c := range []string{"100.64.0.0/10", "0.0.0.0/8", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4",
+		"64:ff9b::/96", "64:ff9b:1::/48"} {
+		_, n, _ := net.ParseCIDR(c)
+		out = append(out, n)
+	}
+	return out
+}()
+
 // blocked reports whether ip is in an SSRF-sensitive range that must never be dialed.
 func blocked(ip net.IP) bool {
+	for _, n := range reserved {
+		if n.Contains(ip) {
+			return true
+		}
+	}
 	return ip.IsLoopback() || // 127.0.0.0/8, ::1
 		ip.IsPrivate() || // 10/8, 172.16/12, 192.168/16, fc00::/7 (ULA)
 		ip.IsLinkLocalUnicast() || // 169.254.0.0/16 (incl. metadata 169.254.169.254), fe80::/10
@@ -74,7 +92,8 @@ func safeDialContext(base *net.Dialer) func(ctx context.Context, network, addr s
 func Client(timeout time.Duration) *http.Client {
 	base := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	tr := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		// No proxy: through one, the dial would check the proxy's address and never the target's.
+		Proxy:                 nil,
 		DialContext:           safeDialContext(base),
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          10,

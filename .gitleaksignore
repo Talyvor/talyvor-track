@@ -1,0 +1,10 @@
+# Reviewed gitleaks findings (B50.9, 28 Oct 2026): every one is a test fixture — dummy secrets in tests and an
+# Ed25519-signed assertion whose private key was discarded. None is a credential anything accepts.
+5827c3ba647bf895035afe21e16f4b871c7f2341:internal/gatewayauth/testdata/gateway-minted-assertion.json:jwt:5
+46610c2d7338238f6cda893ce597ec4d0a046868:internal/metrics/handler_test.go:generic-api-key:10
+6fdb27df19903c69008d57a097765a8cc750a867:internal/config/shipped_defaults_test.go:generic-api-key:64
+6fdb27df19903c69008d57a097765a8cc750a867:internal/config/shipped_defaults_test.go:generic-api-key:95
+24d5e3aee980b200b6369c34e499f8eaeb4423ee:internal/lensintegration/spend_alert_attribution_divergence_test.go:generic-api-key:108
+f25d7eed8b37ac0180b9ea51e8a638b075299fad:internal/config/config_test.go:generic-api-key:42
+03eb9710104195f6a7a6831807348ff6eaf8a6b8:internal/guest/write_test.go:generic-api-key:20
+7d114ba7afa23b44d04c8581877f5caa9b9351c4:internal/config/integration_key_test.go:generic-api-key:13
