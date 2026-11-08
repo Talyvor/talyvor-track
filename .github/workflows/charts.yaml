@@ -54,15 +54,17 @@ jobs:
           KUBECTL_SHA256: a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989
           HELM_VERSION: v4.2.0
           HELM_SHA256: 97dbeb971be4ac4b27e3839976d9564c0fb35c6f3b1da89dd1e292d236af4096
+        # --retry: a transient 503 from a download host failed the nightly run
+        # once (B43.28); curl retries 408/429/5xx, and the checksums still gate.
         run: |
           set -euo pipefail
-          curl -fsSL -o kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+          curl -fsSL --retry 5 --retry-delay 5 -o kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
           echo "${KIND_SHA256}  kind" | sha256sum -c -
           sudo install -m 0755 kind /usr/local/bin/kind
-          curl -fsSL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          curl -fsSL --retry 5 --retry-delay 5 -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           echo "${KUBECTL_SHA256}  kubectl" | sha256sum -c -
           sudo install -m 0755 kubectl /usr/local/bin/kubectl
-          curl -fsSL -o helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          curl -fsSL --retry 5 --retry-delay 5 -o helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
           echo "${HELM_SHA256}  helm.tar.gz" | sha256sum -c -
           tar -xzf helm.tar.gz linux-amd64/helm
           sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
