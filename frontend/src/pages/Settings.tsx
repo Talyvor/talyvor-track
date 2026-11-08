@@ -215,17 +215,21 @@ function EmailBrandingForm({ initial }: { initial: { name: string; email_header_
   );
 }
 
-// MailHeaderPreview draws the header as internal/email/layout.go renders it: nothing set is Talyvor's
-// Obsidian and logo; a colour with no logo shows the workspace name in ink that reads on it.
+// MailHeaderPreview draws the header as internal/email/layout.go renders it: nothing set is Talyvor's logo,
+// 200 px wide on white; a colour with no logo shows the workspace name in ink that reads on it.
 function MailHeaderPreview({ name, color, logo }: { name: string; color: string; logo: string }) {
   const unbranded = !color && !logo;
-  const bg = HEX_COLOR.test(color) ? color : OBSIDIAN;
-  const src = unbranded ? "/email-logo.png" : logo.startsWith("https://") ? logo : "";
+  const bg = unbranded ? "#FFFFFF" : HEX_COLOR.test(color) ? color : OBSIDIAN;
+  const src = unbranded ? "/talyvor-email-logo-on-light-400.png" : logo.startsWith("https://") ? logo : "";
   return (
     <div aria-label="Email header preview" className="overflow-hidden rounded-md border border-border">
       <div style={{ background: bg }} className="px-6 py-5">
         {src ? (
-          <img src={src} alt={unbranded ? "Talyvor" : name} className="block h-8 max-w-full" />
+          unbranded ? (
+            <img src={src} alt="Talyvor" width={200} height={64} className="block h-auto w-[200px]" />
+          ) : (
+            <img src={src} alt={name} className="block h-8 max-w-full" />
+          )
         ) : (
           <span className="text-xl font-semibold" style={{ color: ink(bg) }}>
             {name}

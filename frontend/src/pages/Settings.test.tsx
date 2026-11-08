@@ -56,6 +56,16 @@ describe("Settings email branding", () => {
     expect(preview.querySelector("img")?.getAttribute("src")).toBe("https://acme.example/logo.png");
   });
 
+  it("previews an unbranded workspace's mail with the chosen logo on a light header", async () => {
+    fakeTrack("owner");
+    renderSettings();
+    const preview = await screen.findByLabelText("Email header preview");
+    const img = preview.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("/talyvor-email-logo-on-light-400.png");
+    expect(img?.getAttribute("width")).toBe("200");
+    expect((preview.firstElementChild as HTMLElement).style.background).toBe("rgb(255, 255, 255)");
+  });
+
   it("shows the server's message when it refuses a value", async () => {
     fakeTrack("owner", 400);
     renderSettings();
