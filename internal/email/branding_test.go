@@ -84,8 +84,8 @@ func TestBrandedWorkspaceMailShowsItsNameLogoAndColour(t *testing.T) {
 	}
 
 	plain := mailTo(d.Workspace(t).ID, "bob@plain.com")
-	for _, want := range []string{"From: Track <notifications@talyvor.com>", "background:#060A12",
-		`<img src="https://track.example/email-logo.png" alt="Talyvor"`} {
+	for _, want := range []string{"From: Track <notifications@talyvor.com>", "background:#FFFFFF",
+		`<img src="https://track.example/talyvor-email-logo-on-light-400.png" alt="Talyvor"`} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("unbranded mail lacks %q:\n%s", want, plain)
 		}
