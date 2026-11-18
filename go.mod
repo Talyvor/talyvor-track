@@ -11,7 +11,7 @@ go 1.25.0
 // golangci-lint refused outright — "the Go language version (go1.25) used to build golangci-lint
 // is lower than the targeted Go version (1.26.6)". The directive governs LOCAL builds and the
 // Docker build (golang:1.25-alpine, GOTOOLCHAIN unset ⇒ auto ⇒ it fetches this); ci.yaml's
-// go-version governs CI. Both are now 1.26.10 and internal/migrate/toolchain_pin_test.go asserts
+// go-version governs CI. Both are now 1.26.11 and internal/migrate/toolchain_pin_test.go asserts
 // the lockstep.
 //
 // Without this directive track built on whatever was installed (go1.26.3) and govulncheck
@@ -26,15 +26,16 @@ go 1.25.0
 // crypto/tls), which turned the govulncheck gate red for every PR on 9 Oct 2026; lens pinned it first.
 // >= 1.26.10 clears GO-2026-6809 (crypto/x509 compromised intermediates), which turned the
 // govulncheck gate red on 23 Oct 2026.
+// >= 1.26.11 clears GO-2026-6859 (net/http MaxBytesReader header race), red on 18 Nov 2026.
 //
 // ⚠ TRACK NEVER GOT THE SIGNAL, SO IT NEVER GOT THE FIX — the diagnosis existed in a sibling repo
 // the whole time. Adding the CI gate that would have said so is W6.33 and needs the remaining pgx
 // advisory decided first, or the gate lands red on main.
-toolchain go1.26.10
+toolchain go1.26.11
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.4.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.9.2

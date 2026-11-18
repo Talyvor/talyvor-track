@@ -39,6 +39,10 @@ concurrency:
   group: charts-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: the job only reads the repository.
+permissions:
+  contents: read
+
 jobs:
   kind:
     runs-on: ubuntu-latest
