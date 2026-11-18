@@ -202,7 +202,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 // canonical templates (## headers, lists, checkboxes, code spans).
 // Going full CommonMark would balloon the bundle for one preview
 // pane; this is intentional minimum-viable.
-function MarkdownPreview({ source }: { source: string }) {
+export function MarkdownPreview({ source }: { source: string }) {
   const lines = source.split("\n");
   return (
     <div className="space-y-1 leading-relaxed">
@@ -241,10 +241,12 @@ function renderLine(line: string, key: number): React.ReactNode {
       </div>
     );
   }
-  if (/^<!--.*-->$/.test(line.trim())) {
+  const trimmed = line.trim();
+  if (trimmed.length >= 7 && trimmed.startsWith("<!--") && trimmed.endsWith("-->")) {
+    // Only the outer markers come off; what is left is a text node, never markup.
     return (
       <div key={key} className="italic text-muted">
-        {line.replace(/<!--\s?|\s?-->/g, "")}
+        {trimmed.slice(4, -3).trim()}
       </div>
     );
   }

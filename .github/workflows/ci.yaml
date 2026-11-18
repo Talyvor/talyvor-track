@@ -5,6 +5,11 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: every job reads the repository and nothing more unless it says so
+# (build-image adds packages: write to push the image).
+permissions:
+  contents: read
+
 jobs:
   # Regression locks (semgrep, whole .semgrep/ dir) for two tenancy/authz classes:
   #   - object-graph cross-object tenancy: a store inserting a cross-object *_id reference
